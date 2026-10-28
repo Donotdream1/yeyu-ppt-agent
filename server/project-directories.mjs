@@ -11,7 +11,7 @@ export async function validateProjectParent(user,value,{create=false}={}){
  // to the same authorized directory and must not be mistaken for a symlink escape.
  let realAllowed;if(user.role!=='owner'){await fs.mkdir(allowed,{recursive:true});realAllowed=await fs.realpath(allowed);}
  let ancestor=target;while(!await fs.stat(ancestor).then(s=>s.isDirectory(),()=>false)){const next=path.dirname(ancestor);if(next===ancestor)throw fail('目录不存在');ancestor=next;}
- const real=await fs.realpath(ancestor),targetExists=await fs.stat(target).then(s=>s.isDirectory(),()=>false);
+ const real=await fs.realpath(ancestor);
  if(user.role!=='owner'){
   const resolvedTarget=path.resolve(real,path.relative(ancestor,target));if(!withinDirectory(realAllowed,resolvedTarget))throw fail(withinDirectory(allowed,target)?'目录不能通过链接访问其他账号的文件':'请选择当前账号项目目录中的文件夹',403);
  }
