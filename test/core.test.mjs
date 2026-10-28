@@ -83,6 +83,7 @@ test('文本解析支持 UTF-8，拒绝无文字或不支持的文件',async()=>
 test('真实素材：跨页复用保留图片、母版、图表与嵌入工作簿的关系',async t=>{
   const db=await readLibrary();if(!db.assets.length){t.skip('没有本地素材');return;}
   const normal=db.assets.find(a=>a.images&&!a.charts&&!a.tables),chart=db.assets.find(a=>a.charts);
+  if(!normal||!chart){t.skip('需要同时含图片和原生图表的额外可公开素材；合成基础素材不包含这些对象');return;}
   const sourceBytes=await sourceBuffer(normal.sourceId);const before=await openZip(sourceBytes);
   const out=await createDeck([{...s,assetId:normal.id},{...s,assetId:chart.id},{...s,assetId:normal.id}],db.assets,sourceBuffer);
   const {z,order}=await verifyPackage(out.buffer);assert.equal(order.paths.length,3);assert.equal(new Set(order.paths).size,3);

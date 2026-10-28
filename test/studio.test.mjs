@@ -11,6 +11,7 @@ import {prepareChart,drawChart,chartForDeck} from '../server/charts.mjs';
 import {readDataFile,parseDelimited} from '../server/data-input.mjs';
 import {deckSchema} from '../server/planner.mjs';
 import {componentNodes} from '../server/components.mjs';
+import {nativeChartMatches} from '../server/recommendations.mjs';
 
 const sourceText='模拟测试数据：一月产量12吨；二月产量18吨；三月产量15吨。';
 const chart={code:'S01',title:'模拟测试产量',unit:'吨',grain:'每月一个已确定产量',measureType:'total',aggregation:'none',records:[['一月',12,'一月产量12吨'],['二月',18,'二月产量18吨'],['三月',15,'三月产量15吨']].map(([x,value,sourceQuote])=>({x,value,sourceQuote,series:'产量'}))};
@@ -45,7 +46,7 @@ test('原生素材索引包含表格、图表、文本、连接线及组合内�
 });
 test('以真实用户模板为包底稿，跨两个素材源重组元素，母版和标志资源不变',async t=>{
   const lib=await readLibrary(),selected=lib.templates?.find(t=>t.id===lib.activeTemplateId),template=selected?{...selected,bnaProfile:undefined}:null;if(!template){t.skip('未导入用户模板');return;}
-  const catalog=await readComponents(),icon=catalog.items.find(c=>/PPT图标/.test(c.sourceName)),image=catalog.items.find(c=>/500页/.test(c.sourceName)&&c.type==='image');assert.ok(icon);assert.ok(image);
+  const catalog=await readComponents(),icon=catalog.items.find(c=>!c.layout&&['shape','group'].includes(c.type)),image=catalog.items.find(c=>c.type==='image'&&c.sourceId!==icon?.sourceId);if(!icon||!image){t.skip('需要来自两个不同素材源的原生图形和图片；个人素材不随源码分发');return;}
   const input={title:'用户模板重组测试',slides:[{title:'用户模板重组测试',subtitle:'模拟测试数据',kind:'cover',bullets:[],notes:''},{title:'下一步流程',subtitle:'',kind:'process',visual:'process',bullets:['资料整理：统一文档格式','内部试用：核查检索功能','反馈迭代：整理待改进问题'],notes:''},{title:'模拟数据图表',subtitle:'',kind:'content',bullets:[],notes:'模拟测试数据',chart:prepareChart(chart,sourceText)}]};
   const plan=autoCompose(input,template,catalog.items);plan.slides[1].blocks.push({id:'cross-source',type:'component',componentId:image.id,x:.72,y:.68,w:.15,h:.16,bindText:false,colorMode:'source'});
   assert.equal(deckSchema.safeParse({...plan,sourceText}).success,true);
@@ -63,6 +64,7 @@ test('以真实用户模板为包底稿，跨两个素材源重组元素，母�
 test('重复使用同一原生图表时，每个实例有自己的数据工作簿',async t=>{
   const lib=await readLibrary(),template=lib.templates?.find(t=>t.id===lib.activeTemplateId);if(!template){t.skip('未导入模板');return;}
   const catalog=await readComponents(),firstChart=prepareChart(chart,sourceText),secondChart=prepareChart({...chart,records:chart.records.map((r,i)=>({...r,value:[2,4,6][i],sourceQuote:`${r.x}产量${[2,4,6][i]}吨`}))},'模拟测试数据：一月产量2吨；二月产量4吨；三月产量6吨。');
+  if(!catalog.items.some(c=>nativeChartMatches({chart:firstChart},c))){t.skip('需要支持S01数据绑定的原生统计图素材');return;}
   const plan=autoCompose({title:'独立图表',slides:[firstChart,secondChart].map(c=>({title:c.title,kind:'content',bullets:[],chart:c}))},template,catalog.items),out=await composeDeck(plan,template,catalog.items),z=await openZip(out.buffer);
   const parts=Object.keys(z.files).filter(n=>n.includes('/instances/')&&n.endsWith('-data.xlsx'));assert.equal(parts.length,2);assert.notEqual(parts[0],parts[1]);const data=[];
   for(const p of parts){const w=await openZip(await z.file(p).async('nodebuffer'));data.push(elements(parse(await w.file('xl/worksheets/sheet1.xml').async('string')),'v').map(n=>+n.textContent));}assert.deepEqual(data,[[12,18,15],[2,4,6]]);
