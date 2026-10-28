@@ -1,0 +1,10 @@
+import {test,expect} from '@playwright/test';
+for(const sections of [['业务需求','技术方案','试验结果'],['业务需求','技术方案','试验结果','迭代计划','实施保障']])test(`${sections.length}章页眉按实际数量展示，用户可修改并随整稿提交制作`,async({page,request})=>{
+ const folders=await(await request.get('/api/workspace/folders')).json(),project=folders.items[0]||await(await request.post('/api/workspace/folders',{data:{name:'页眉关键词验收'}})).json();
+ await page.addInitScript(p=>{localStorage.setItem('yeyu:test-local-user:yeyu-folder',p.id);localStorage.setItem('yeyu:test-local-user:yeyu-folder-name',p.name);},project);
+ const id='66666666-6666-4666-8666-666666666666',plan={title:'机器人项目评审',sections,slides:[{title:'机器人项目评审',kind:'cover',bullets:[]},{title:'目录',kind:'agenda',bullets:sections},...sections.map((title,sectionIndex)=>({title,kind:'content',sectionIndex,visual:'text',bullets:['本章节的已知事实']})),{title:'谢谢',kind:'ending',bullets:[]}]};
+ let submitted;await page.route('**/api/generate',async r=>{const b=r.request().postDataJSON();if(!b.planningOnly){submitted=b;return r.fulfill({status:400,json:{error:'验收停止：不实际生成PPT'}});}return r.fulfill({json:{id}});});
+ await page.route('**/api/jobs/'+id,r=>r.fulfill({json:{id,status:'done',output:{planningOnly:true,plan}}}));
+ await page.goto('/workspace');await page.getByLabel('文档内容',{exact:true}).fill('本次机器人项目评审围绕仓储配送需求、系统设计、现场试验结果及后续迭代安排展开，所有页面须依据现有事实。');await page.getByRole('button',{name:'生成逐页方案',exact:true}).click();
+ await expect(page.getByLabel('第1章页眉关键词',{exact:true})).toHaveValue('业务需求');await expect(page.getByLabel(`第${sections.length}章页眉关键词`,{exact:true})).toHaveValue(sections.at(-1));await expect(page.locator('.outline-navigation input')).toHaveCount(sections.length);await page.getByLabel('第3章页眉关键词',{exact:true}).fill('过于冗长的章节名称');await expect(page.getByRole('button',{name:'开始制作PPT',exact:true})).toBeDisabled();await page.getByLabel('第3章页眉关键词',{exact:true}).fill('现场验证');await page.getByRole('button',{name:'开始制作PPT',exact:true}).click();await expect.poll(()=>submitted?.outlinePlan?.sections[2]).toBe('现场验证');expect(submitted.outlinePlan.slides[4].sectionIndex).toBe(2);
+});

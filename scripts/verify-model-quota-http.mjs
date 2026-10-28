@@ -1,0 +1,40 @@
+// Isolated account store and local model fixture: never touches production users or API credits.
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import express from 'express';
+const directory=await fs.mkdtemp(path.join(os.tmpdir(),'ppt-accounts-http-'));
+process.env.NODE_ENV='test';process.env.AUTH_DATA_DIR=directory;delete process.env.AUTH_TEST_MODE;
+const {installLocalAuth,localAuth}=await import('../server/local-auth.mjs');
+const {installModelConnections,currentModelConnection,modelConnections,withModelConnection,compatibleModelFetch}=await import('../server/model-connections.mjs');
+const {installGenerationQuota,currentGenerationQuota}=await import('../server/generation-quota.mjs');
+const captures=[],modelApp=express();modelApp.use(express.json({limit:'2mb'}));modelApp.post('/v1/chat/completions',(req,res)=>{captures.push({model:req.body.model,authorization:req.headers.authorization,thinking:req.body.thinking});const name=req.body.tools?.[0]?.function?.name||'connection_check';if(req.body.stream){res.set('Content-Type','text/event-stream');res.write('data: '+JSON.stringify({id:'chat-test',object:'chat.completion.chunk',created:1,model:req.body.model,choices:[{index:0,delta:{role:'assistant',tool_calls:[{index:0,id:'call_test',type:'function',function:{name,arguments:'{"ok":true}'}}]},finish_reason:null}]})+'\n\n');res.write('data: '+JSON.stringify({id:'chat-test',object:'chat.completion.chunk',created:1,model:req.body.model,choices:[{index:0,delta:{},finish_reason:'tool_calls'}],usage:{prompt_tokens:10,completion_tokens:5,total_tokens:15}})+'\n\n');return res.end('data: [DONE]\n\n');}res.json({id:'chat-test',object:'chat.completion',created:1,model:req.body.model,choices:[{index:0,finish_reason:'tool_calls',message:{role:'assistant',content:null,tool_calls:[{id:'call_test',type:'function',function:{name,arguments:'{"ok":true}'}}]}}],usage:{prompt_tokens:10,completion_tokens:5,total_tokens:15}});});
+const modelServer=modelApp.listen(0,'127.0.0.1');await new Promise(r=>modelServer.once('listening',r));const modelUrl='http://127.0.0.1:'+modelServer.address().port+'/v1';
+const app=express();app.use(express.json());installLocalAuth(app);installModelConnections(app,localAuth);installGenerationQuota(app,localAuth);
+app.get('/api/probe',async(req,res)=>{await compatibleModelFetch()('unused',{method:'POST',headers:{},body:JSON.stringify({model:'old',thinking:{type:'disabled'},messages:[]})});res.json({model:currentModelConnection().model});});
+app.post('/api/export',async(req,res)=>{if(req.body.fail)throw Error('模拟制作失败');await new Promise(r=>setTimeout(r,40));res.json({id:randomUUID(),url:'/fixture.pptx',plan:{title:'test',slides:[]}});});
+app.post('/api/generate',async(req,res)=>{const quota=currentGenerationQuota();await quota?.finish({id:randomUUID(),url:'/fixture.pptx'});res.status(202).json({id:quota?.ticket||randomUUID()});});
+app.post('/api/jobs/:id/resume',async(req,res)=>{await currentGenerationQuota()?.finish({id:randomUUID(),url:'/fixture.pptx'});res.status(202).json({id:req.params.id});});
+app.use((e,req,res,next)=>res.status(e.status||400).json({error:e.message}));const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base='http://127.0.0.1:'+server.address().port;
+const login=async(username)=>{const r=await fetch(base+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password:'test-password-123'})});assert.equal(r.status,200);return r.headers.get('set-cookie').split(';')[0];};
+const call=async(cookie,url,body,method=body===undefined?'GET':'POST')=>{const r=await fetch(base+url,{method,headers:{Cookie:cookie,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:r.status,body:await r.json()};};
+try{
+ const admin=await localAuth.register({username:'quota-admin',password:'test-password-123'}),a=await localAuth.register({username:'quota-alice',password:'test-password-123'});await localAuth.register({username:'quota-bob',password:'test-password-123'});
+ const [owner,alice,bob]=await Promise.all(['quota-admin','quota-alice','quota-bob'].map(login));
+ const input={name:'本地测试连接',provider:'compatible',baseUrl:modelUrl,model:'private-model-a',apiKey:'test-user-key-alice'};
+ const saved=await call(alice,'/api/model-connections',input);assert.equal(saved.status,201);assert.equal(JSON.stringify(saved.body).includes(input.apiKey),false);const id=saved.body.id;
+ assert.equal((await call(bob,'/api/model-connections')).body.items.length,0);assert.equal((await call(bob,'/api/model-connections/'+id,undefined,'DELETE')).status,404);
+ assert.equal((await call(alice,'/api/model-connections/test',{...input,id,apiKey:''})).body.toolCalling,true);
+ assert.equal((await call(alice,'/api/probe')).body.model,input.model);assert.equal(captures.at(-1).authorization,'Bearer '+input.apiKey);assert.equal(captures.at(-1).thinking,undefined);
+ assert.equal((await call(alice,'/api/export',{fail:true})).status,400);assert.equal((await call(alice,'/api/generation-quota')).body.used,0);
+ const first=await call(alice,'/api/export',{});assert.equal(first.status,200);const concurrent=await Promise.all(Array.from({length:7},()=>call(alice,'/api/export',{})));assert.equal(concurrent.filter(r=>r.status===200).length,4);assert.equal(concurrent.filter(r=>r.status===403).length,3);
+ assert.equal((await call(alice,'/api/generate',{})).status,403);assert.equal((await call(alice,'/api/export',{baseOutputId:first.body.id})).status,200);assert.equal((await call(alice,'/api/generation-quota')).body.used,5);
+ assert.equal((await call(alice,'/api/admin/users/'+a.user.id+'/generation-quota',{limit:20},'PATCH')).status,403);
+ assert.equal((await call(owner,'/api/admin/users/'+a.user.id+'/generation-quota',{limit:6},'PATCH')).status,200);assert.equal((await call(alice,'/api/generate',{})).status,202);assert.equal((await call(alice,'/api/generation-quota')).body.used,6);
+ assert.equal((await call(owner,'/api/generation-quota')).body.unlimited,true);
+ const users=await call(owner,'/api/admin/users');assert.ok(users.body.items.find(u=>u.id===a.user.id).generationQuota);assert.equal(JSON.stringify(users.body).includes(input.apiKey),false);
+ if(process.argv.includes('--hermes')){const {runHermes,hermesRuntimeStatus}=await import('../server/hermes-client.mjs');assert.equal((await hermesRuntimeStatus()).available,true);const c=await modelConnections.resolve(a.user.id);let submitted=false;const before=captures.length;await withModelConnection(c,()=>runHermes({id:randomUUID(),apiKey:'wrong',model:'wrong',allowSkillTool:false,role:'connection-verification',maxIterations:2,maxTokens:256,timeoutMs:60000,systemPrompt:'Call connection_check once.',message:'Check the connection.',tools:[{name:'connection_check',description:'Check connection',parameters:{type:'object',properties:{ok:{type:'boolean'}},required:['ok']}}],onTool:async()=>{submitted=true;return {ok:true};},completeWhen:()=>true}));assert.equal(submitted,true);assert.ok(captures.length>before);assert.equal(captures.at(-1).model,input.model);assert.equal(captures.at(-1).authorization,'Bearer '+input.apiKey);assert.equal(captures.at(-1).thinking,undefined);console.log('PASS actual Hermes Python worker uses saved per-user endpoint, model and key');}
+ console.log('PASS HTTP user isolation, encrypted connections, tool-call test, quota concurrency, edit exemption and administrator adjustment');
+}finally{await new Promise(r=>server.close(r));await new Promise(r=>modelServer.close(r));await fs.rm(directory,{recursive:true,force:true});}

@@ -1,0 +1,6 @@
+import React from 'react';
+import {Settings2,Palette,HelpCircle,LogOut,ChevronUp} from 'lucide-react';
+import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator} from '@/components/ui/dropdown-menu';
+export default function AccountMenu({user,onSettings,onPersonalization,onHelp,onLogout}){
+ return <DropdownMenu><DropdownMenuTrigger asChild><button className="workspace-account account-menu-trigger" aria-label="用户菜单" title={user?.displayName||'用户菜单'}><span className="account-icon">{user?.displayName?.slice(0,1)||'页'}</span><span className="account-menu-label"><strong>{user?.displayName||user?.username}</strong><small>{user?.role==='owner'?'管理员':'个人账号'}</small></span><ChevronUp size={14} className="account-menu-chevron"/></button></DropdownMenuTrigger><DropdownMenuContent><div className="account-menu-heading"><strong>{user?.displayName}</strong><small>{user?.username}</small></div><DropdownMenuSeparator/><DropdownMenuItem onSelect={onSettings}><Settings2 size={16}/>设置</DropdownMenuItem><DropdownMenuItem onSelect={onPersonalization}><Palette size={16}/>个性化</DropdownMenuItem><DropdownMenuItem onSelect={onHelp}><HelpCircle size={16}/>帮助</DropdownMenuItem><DropdownMenuSeparator/><DropdownMenuItem onSelect={onLogout}><LogOut size={16}/>退出登录</DropdownMenuItem></DropdownMenuContent></DropdownMenu>;
+}

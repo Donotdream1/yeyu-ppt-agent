@@ -1,0 +1,11 @@
+import React,{useEffect,useState} from 'react';
+import {api} from '@/lib/api';
+import {useAuth} from '@/components/AuthGate';
+import {Button} from '@/components/ui/button';
+import {SelectField} from '@/components/ui/select-field';
+export default function PresentationPreferences({s}){
+ const auth=useAuth(),[styles,setStyles]=useState([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ useEffect(()=>{api('/api/style-skills').then(v=>setStyles(v.items)).catch(e=>setError(e.message));},[]);
+ async function save(){setBusy(true);setError('');try{const result=await api('/api/auth/profile',{method:'PATCH',body:JSON.stringify({preferences:{presentation:{templateId:s.templateId||'',styleSkillId:s.styleSkillId||'native-material',pageCount:Number(s.pageCount)||0,layoutDensity:s.layoutDensity||'full'}}})});auth.setUser(result.user);setNotice('演示偏好已保存');}catch(e){setError(e.message);}finally{setBusy(false);}}
+ return <div className="settings-form"><label>默认模板<SelectField aria-label="默认演示模板" value={s.templateId||''} onValueChange={s.setTemplateId}><option value="">使用系统当前模板</option>{s.studio.templates.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</SelectField></label><label>默认版式<SelectField aria-label="默认演示版式" value={s.styleSkillId} onValueChange={s.setStyleSkillId}>{styles.filter(i=>i.status==='ready').map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</SelectField></label><label>默认页数<SelectField aria-label="默认演示页数" value={s.pageCount||0} onValueChange={v=>s.setPageCount(Number(v))}><option value="0">自动规划，优先采用版式默认页数</option>{Array.from({length:28},(_,i)=><option key={i} value={i+3}>{i+3}页</option>)}</SelectField></label><label>页面密度<SelectField aria-label="默认页面密度" value={s.layoutDensity||'full'} onValueChange={s.setLayoutDensity}><option value="full">主体充分展示</option><option value="balanced">均衡布局</option><option value="spacious">宽松留白</option></SelectField></label><Button disabled={busy} onClick={()=>void save()}>保存演示偏好</Button>{notice&&<p role="status">{notice}</p>}{error&&<p role="alert">{error}</p>}</div>;
+}

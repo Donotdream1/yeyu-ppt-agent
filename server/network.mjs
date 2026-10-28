@@ -1,0 +1,4 @@
+import os from 'node:os';
+export function localAddresses(){const entries=Object.entries(os.networkInterfaces()).sort(([a],[b])=>Number(/vmware|virtual|vethernet|wsl|docker|vpn/i.test(a))-Number(/vmware|virtual|vethernet|wsl|docker|vpn/i.test(b)));return [...new Set(['127.0.0.1','localhost',...entries.flatMap(([,n])=>n).filter(n=>n.family==='IPv4'&&!n.internal&&!n.address.startsWith('169.254.')).map(n=>n.address)])];}
+export function networkInfo(port=3210){const ips=localAddresses().filter(a=>!['127.0.0.1','localhost'].includes(a));return {port,addresses:ips,localUrl:`http://127.0.0.1:${port}`,lanUrls:ips.map(ip=>`http://${ip}:${port}`)};}
+export function allowedLocalOrigin(origin,port){if(!origin)return true;try{const u=new URL(origin);return ['http:','https:'].includes(u.protocol)&&Number(u.port|| (u.protocol==='https:'?443:80))===port&&localAddresses().includes(u.hostname);}catch{return false;}}

@@ -1,0 +1,16 @@
+name: Feature request / 功能建议
+description: Suggest an improvement with a concrete user scenario.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: usecase
+    attributes:
+      label: User scenario / 使用场景
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior / 期望效果
+    validations:
+      required: true

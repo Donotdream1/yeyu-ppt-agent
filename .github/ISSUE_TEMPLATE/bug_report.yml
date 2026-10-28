@@ -1,0 +1,23 @@
+name: Bug report / 问题反馈
+description: Report a reproducible problem without uploading private material.
+labels: [bug]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened / 问题描述
+      description: Include expected behavior and exact steps. Do not paste credentials or private documents.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment / 运行环境
+      placeholder: Windows version, Node version, Office version, release/commit, model provider and model name (no key)
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence / 脱敏截图或日志
+      description: Use synthetic PPTX examples. Remove account information, cookies and API keys.

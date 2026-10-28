@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report
+    url: https://github.com/Donotdream1/yeyu-ppt-agent/security/advisories/new
+    about: Report vulnerabilities privately; never publish credentials.

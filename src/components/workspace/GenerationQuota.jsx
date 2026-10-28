@@ -1,0 +1,3 @@
+import React,{useEffect,useState} from 'react';
+import {api} from '@/lib/api';
+export default function GenerationQuota(){const [quota,setQuota]=useState(null),[error,setError]=useState('');useEffect(()=>{api('/api/generation-quota').then(setQuota).catch(e=>setError(e.message));},[]);if(error)return <p role="alert">{error}</p>;if(!quota)return null;return <div className="settings-quota"><strong>生成额度</strong><span>{quota.unlimited?'管理员不限份数':`已生成 ${quota.used} / ${quota.limit} 份${quota.reserved?' · 制作中 '+quota.reserved+' 份':''}`}</span>{!quota.unlimited&&<small>{quota.remaining>0?`还可生成 ${quota.remaining} 份`:'额度已用完，请联系管理员增加额度'}；逐页修改与失败重试不重复计数。</small>}</div>;}

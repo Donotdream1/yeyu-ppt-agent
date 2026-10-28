@@ -1,0 +1,46 @@
+import {modelApiKey} from './model-connections.mjs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {purgeTrashedOutputs} from './output-trash.mjs';
+import {workspaceLibrary} from './workspace-library.mjs';
+import {listProjectDirectories} from './project-directories.mjs';
+import {projectLocation,projectFiles,resolveProjectFile,storeProjectFile} from './project-files.mjs';
+import {materialPreferences,excludeMaterialPages} from './material-preferences.mjs';
+import {readMaterialTags} from './material-tag-store.mjs';
+import {startStyleAnalysis,recoverInterruptedStyleAnalyses} from './style-analysis.mjs';
+import {listStyleSkills,styleSkill,importStyleSkill,editStyleSkill,deleteStyleSkills,createLayoutSkill,bindLayoutReference} from './style-market.mjs';
+import {listPageConversations,readPageConversation,versionChanges,hermesFramework,frameworkFile} from './hermes-journal.mjs';
+import {localAuth} from './local-auth.mjs';
+import {dataDir,importPptx} from './library.mjs';
+import {indexComponents} from './components.mjs';
+import {indexMaterialLayouts} from './material-layouts.mjs';
+import {renderSource,renderPowerPoint} from './render.mjs';
+import {startMaterialTagging} from './material-tagging.mjs';
+const ownsRoot=(user,id)=>localAuth.owns('roots',id,user).then(async ok=>ok||localAuth.ownsOutput(id,user));
+async function renderStyleReference(skill,user){const ref=skill.nativeTemplate;if(ref?.private&&ref.previewKey){await localAuth.claim('previews',ref.previewKey,user.id);void renderPowerPoint(path.join(dataDir,'sources',ref.sourceId+'.pptx'),path.join(dataDir,'previews',ref.previewKey),'style-'+ref.previewKey);}else if(skill.sourceId)void renderSource(skill.sourceId);}
+export function installWorkspaceRoutes(app,upload){
+ app.get('/api/projects/location',async(req,res)=>res.json(await projectLocation(req.user)));
+ app.get('/api/projects/directories',async(req,res)=>res.json(await listProjectDirectories(req.user,req.query.path)));
+ app.get('/api/projects/:id',async(req,res)=>{const project=await workspaceLibrary.ensureDisk(req.user.id,req.params.id,req.user),manifest=await projectFiles(project),db=await workspaceLibrary.read(req.user.id),visible=[];for(const version of manifest.versions){try{const output=JSON.parse(await fs.readFile(path.join(dataDir,'outputs',version.outputId+'.json'),'utf8'));const record=db.documents[workspaceLibrary.root(output)];if(record?.folderId===project.id&&!record.deletedAt)visible.push(version);}catch{}}res.json({...project,manifest:{...manifest,versions:visible}});});
+ app.post('/api/projects/:id/files',upload.array('files',10),async(req,res)=>{const project=await workspaceLibrary.ensureDisk(req.user.id,req.params.id,req.user),items=[];for(const f of req.files||[])items.push(await storeProjectFile(project,f.buffer,Buffer.from(f.originalname,'latin1').toString('utf8')));res.json({items});});
+ app.get('/api/projects/:id/files/:file',async(req,res)=>{const project=await workspaceLibrary.folder(req.user.id,req.params.id),file=await resolveProjectFile(project,req.params.file);res.attachment(file.name).sendFile(file.path);});
+ app.post('/api/outputs/batch-delete',async(req,res)=>{const ids=[...new Set(req.body.ids||[])];if(!ids.length||ids.length>500||ids.some(id=>typeof id!=='string'||!/^[a-f0-9-]{36}$/i.test(id)))throw Error('请选择1–500份作品');const infos=[];for(const id of ids){if(!await localAuth.ownsOutput(id,req.user))return res.status(403).json({error:'无权删除其中的作品'});infos.push(JSON.parse(await fs.readFile(path.join(dataDir,'outputs',id+'.json'),'utf8')));}for(const info of infos)await workspaceLibrary.organize(req.user.id,info,{deleted:true});res.json({ok:true,count:ids.length});});
+ app.post('/api/outputs/purge',async(req,res)=>res.json(await purgeTrashedOutputs(req.user,req.body)));
+ app.get('/api/material-preferences',async(req,res)=>res.json(await materialPreferences(req.user.id)));
+ app.post('/api/material-pages/batch-delete',async(req,res)=>{const tags=await readMaterialTags();await excludeMaterialPages(req.user.id,req.body.ids,{validIds:new Set(tags.pages.map(p=>p.id)),restore:req.body.restore===true});res.json({ok:true,count:req.body.ids.length});});
+ app.get('/api/style-skills',async(req,res)=>{await recoverInterruptedStyleAnalyses(req.user.id);res.json({items:await listStyleSkills(req.user.id)});});
+ app.get('/api/style-skills/:id',async(req,res)=>res.json(await styleSkill(req.user.id,req.params.id)));
+ app.post('/api/style-skills/import',upload.single('file'),async(req,res)=>{if(!req.file)throw Error('请选择风格文件');const name=Buffer.from(req.file.originalname,'latin1').toString('utf8');
+  const skill=await importStyleSkill(req.user.id,req.file.buffer,name);await renderStyleReference(skill,req.user);if(req.body.workspaceFolderId){const project=await workspaceLibrary.ensureDisk(req.user.id,req.body.workspaceFolderId,req.user);await storeProjectFile(project,req.file.buffer,name,{role:'skill'});}res.status(201).json(skill.nativeTemplate?await startStyleAnalysis(req.user.id,skill.id,{apiKey:req.body.apiKey||modelApiKey(),model:req.body.model||req.user.preferences?.model||process.env.DEEPSEEK_MODEL}):skill);
+ });
+ app.post('/api/style-skills/create',upload.fields([{name:'reference',maxCount:1},{name:'prompt',maxCount:1}]),async(req,res)=>{const f=req.files?.reference?.[0],p=req.files?.prompt?.[0];if(f&&!/\.pptx$/i.test(f.originalname))throw Error('参考文件需为PPTX');if(p&&!/\.(md|txt)$/i.test(p.originalname))throw Error('提示词需为MD或TXT');const skill=await createLayoutSkill(req.user.id,{...req.body,...(p?{content:p.buffer.toString('utf8').replace(/^\uFEFF/,'')}: {})},f?{buffer:f.buffer,name:Buffer.from(f.originalname,'latin1').toString('utf8')}:undefined);await renderStyleReference(skill,req.user);res.status(201).json(f?await startStyleAnalysis(req.user.id,skill.id):skill);});
+ app.post('/api/style-skills/:id/reference',upload.single('file'),async(req,res)=>{if(!req.file||!/\.pptx$/i.test(req.file.originalname))throw Error('请选择参考PPTX');const skill=await bindLayoutReference(req.user.id,req.params.id,{buffer:req.file.buffer,name:Buffer.from(req.file.originalname,'latin1').toString('utf8')});await renderStyleReference(skill,req.user);res.json(await startStyleAnalysis(req.user.id,skill.id));});
+ app.post('/api/style-skills/:id/analyze',async(req,res)=>res.status(202).json(await startStyleAnalysis(req.user.id,req.params.id,{apiKey:req.body.apiKey||modelApiKey(),model:req.body.model||req.user.preferences?.model||process.env.DEEPSEEK_MODEL})));
+ app.patch('/api/style-skills/:id',async(req,res)=>res.json(await editStyleSkill(req.user.id,req.params.id,req.body)));
+ app.post('/api/style-skills/batch-delete',async(req,res)=>{await deleteStyleSkills(req.user.id,req.body.ids);res.json({ok:true});});
+ app.get('/api/hermes/conversations',async(req,res)=>res.json(await listPageConversations({...req.query,canAccess:id=>ownsRoot(req.user,id)})));
+ app.get('/api/hermes/conversations/:id',async(req,res)=>{if(!await ownsRoot(req.user,req.params.id.slice(0,36)))return res.status(403).json({error:'无权查看此演示记录'});res.json(await readPageConversation(req.params.id));});
+ app.get('/api/hermes/conversations/:id/versions/:output',async(req,res)=>{if(!await ownsRoot(req.user,req.params.id.slice(0,36)))return res.status(403).json({error:'无权查看此演示记录'});res.json(await versionChanges(req.params.id,req.params.output));});
+ app.get('/api/hermes/framework',async(req,res)=>res.json(await hermesFramework()));
+ app.get('/api/hermes/framework/file',async(req,res)=>res.json(await frameworkFile(req.query.path)));
+}
