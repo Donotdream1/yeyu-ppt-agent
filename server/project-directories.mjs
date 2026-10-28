@@ -7,11 +7,13 @@ export async function validateProjectParent(user,value,{create=false}={}){
  const loc=await projectLocation(user),raw=value||loc.defaultRoot;
  if(typeof raw!=='string'||!path.isAbsolute(raw)||raw.length>1000||raw.includes('\0'))throw fail('请选择有效的绝对目录');
  const target=path.resolve(raw),allowed=path.resolve(loc.defaultRoot);
- if(user.role!=='owner'&&!withinDirectory(allowed,target))throw fail('请选择当前账号项目目录中的文件夹',403);
+ // Compare canonical paths below: Windows short (8.3) and long names can refer
+ // to the same authorized directory and must not be mistaken for a symlink escape.
+ let realAllowed;if(user.role!=='owner'){await fs.mkdir(allowed,{recursive:true});realAllowed=await fs.realpath(allowed);}
  let ancestor=target;while(!await fs.stat(ancestor).then(s=>s.isDirectory(),()=>false)){const next=path.dirname(ancestor);if(next===ancestor)throw fail('目录不存在');ancestor=next;}
  const real=await fs.realpath(ancestor),targetExists=await fs.stat(target).then(s=>s.isDirectory(),()=>false);
  if(user.role!=='owner'){
-  await fs.mkdir(allowed,{recursive:true});if(!withinDirectory(await fs.realpath(allowed),real)&&(targetExists||!withinDirectory(real,allowed)))throw fail('目录不能通过链接访问其他账号的文件',403);
+  const resolvedTarget=path.resolve(real,path.relative(ancestor,target));if(!withinDirectory(realAllowed,resolvedTarget))throw fail(withinDirectory(allowed,target)?'目录不能通过链接访问其他账号的文件':'请选择当前账号项目目录中的文件夹',403);
  }
  if(create){await fs.mkdir(target,{recursive:true});const resolved=await fs.realpath(target);if(user.role!=='owner'&&!withinDirectory(await fs.realpath(allowed),resolved))throw fail('项目目录超出授权范围',403);await fs.access(resolved,fs.constants.W_OK);return resolved;}
  return target;
