@@ -36,6 +36,8 @@ import {openPageSession,uploadSessionPhotos,submitPageMessage,pageWorkspaceState
 import {readPageAsset} from './page-assets.mjs';
 import {allowedLocalOrigin,networkInfo} from './network.mjs';
 import {installLocalAuth,localAuth} from './local-auth.mjs';
+import {installCollaborationRoutes} from './collaboration-routes.mjs';
+import {installSlidesConnectors} from './slides-connectors.mjs';
 import {PAGE_PURPOSES,PAGE_LOGICS,materialTagsCsv} from './material-tags.mjs';
 import {searchMaterialPages,startMaterialTagging,taggingJobs} from './material-tagging.mjs';
 import {readMaterialTags,reviewMaterialTags} from './material-tag-store.mjs';
@@ -47,6 +49,8 @@ app.use((req,res,next)=>{if(!allowedLocalOrigin(req.headers.origin,port))return 
 app.get('/api/network',async(req,res)=>res.json(networkInfo(port)));
 app.use(express.json({limit:'12mb'}));
 installLocalAuth(app);
+installCollaborationRoutes(app,localAuth);
+installSlidesConnectors(app,localAuth);
 installModelConnections(app,localAuth);
 installGenerationQuota(app,localAuth);
 app.get('/api/workspace/folders',async(req,res)=>res.json({items:await workspaceLibrary.folders(req.user.id)}));
@@ -152,7 +156,7 @@ const validId=id=>/^[a-f0-9-]{16,40}$/.test(id);
 app.get('/api/bundles/:id',async(req,res)=>{if(!/^[a-f0-9-]{36}$/.test(req.params.id))return res.sendStatus(404);res.download(path.join(dataDir,'outputs',req.params.id+'.zip'),'PPT与图表数据.zip');});
 app.get('/api/output-assets/:id/:name',(req,res)=>{if(!/^[a-f0-9-]{36}$/.test(req.params.id)||/[\\/]/.test(req.params.name)||req.params.name.includes('..'))return res.sendStatus(404);res.sendFile(path.join(dataDir,'outputs',req.params.id,req.params.name));});
 const pinnedOutputs=new Map();
-app.get('/api/outputs',async(req,res)=>{const db=await workspaceLibrary.read(req.user.id);res.json(await outputHistory({...req.query,trash:req.query.trash==='true',organization:info=>workspaceLibrary.organization(db,info),...(req.user?.role==='member'?{canAccess:id=>localAuth.ownsOutput(id,req.user)}:{})}));});
+app.get('/api/outputs',async(req,res)=>{const db=await workspaceLibrary.read(req.user.id);res.json(await outputHistory({...req.query,trash:req.query.trash==='true',organization:info=>workspaceLibrary.organization(db,info),...(req.user?.role==='member'?{canAccess:id=>localAuth.ownsOutput(id,req.user,false)}:{})}));});
 app.get('/api/outputs/:id',async(req,res)=>{if(!validId(req.params.id))return res.sendStatus(404);const info=JSON.parse(await fs.readFile(path.join(dataDir,'outputs',req.params.id+'.json'),'utf8'));if(info.plan?.templateId){if(!pinnedOutputs.has(info.id))pinnedOutputs.set(info.id,await pinOutputPlan(info,(await readComponents()).items));info.plan=pinnedOutputs.get(info.id);}let render=renderStates.get(req.params.id);if(!render){const files=await fs.readdir(path.join(dataDir,'previews',req.params.id)).catch(()=>[]);const pages=files.filter(n=>/^\d+\.png$/.test(n)).length;render=pages>=info.pages?{status:'ready',pages}:{status:'unavailable',message:'未生成精确预览'};}res.json({...info,render});});
 app.get('/api/files/:name',async(req,res)=>{const match=req.params.name.match(/^([a-f0-9-]{36})\.pptx$/);if(!match)return res.sendStatus(404);const info=JSON.parse(await fs.readFile(path.join(dataDir,'outputs',match[1]+'.json'),'utf8'));res.download(path.join(dataDir,'outputs',match[1]+'.pptx'),info.title.replace(/[<>:"/\\|?*]/g,'_')+'.pptx');});
 app.use('/api/previews',express.static(path.join(dataDir,'previews')));

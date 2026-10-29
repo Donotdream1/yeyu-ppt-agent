@@ -58,3 +58,12 @@ is based on actual exported results and checks, not model prose.
 Native editability depends on the source object: a real photo stays a photo;
 native chart data is editable when a supported chart is bound. An exported PNG
 or SVG alone does not prove a native Office chart exists.
+
+Template slot contracts, topic drafts and in-app collaboration are described in
+[the slides workflow](slides-workflow.md). `template-slot-contract.mjs` derives
+capacity from inherited native geometry and typography. `collaboration.mjs`
+stores membership, comments and versioned presenter state; authenticated SSE
+publishes curated snapshots. Viewers receive previews rather than raw source
+plans. Editors reuse the existing page agent and document-lock pipeline.
+`slides-connectors.mjs` optionally sends explicit cloud copies with request-scoped
+tokens; it does not change local permissions or replace the original export.

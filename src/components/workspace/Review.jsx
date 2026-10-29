@@ -33,6 +33,7 @@ import {
 import { FormSelect } from "./forms";
 import SlideImage from "./SlideImage";
 import NativeSelection from './NativeSelection';
+import CollaborationActions from './CollaborationActions';
 import {useAuth} from '@/components/AuthGate';
 const PageAgentPanel=lazy(()=>import('./PageAgentPanel'));
 
@@ -58,9 +59,11 @@ export default function Review({ s, onBack }) {
             已生成
           </Badge>
           <h2>{output.title}</h2>
+          {s.plan.sourceProvenance?.kind==='topic-draft'&&<Badge variant="outline">主题初稿 · 待核实</Badge>}
           <span>{slides.length} 页 · 可编辑 PPTX</span>
         </div>
         <div className="toolbar-actions">
+          <CollaborationActions output={output}/>
           <Button variant="outline" size="sm" onClick={onBack}>
             <ArrowLeft />
             返回作品

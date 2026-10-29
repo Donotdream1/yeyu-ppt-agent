@@ -6,6 +6,8 @@ import {registerTemplate,drawingNodes,nodeBounds,absoluteNodeBounds,direct} from
 import {editableTextTargets} from './material-layouts.mjs';
 import {slotKey} from './material-analysis.mjs';
 import {extractPptStyle} from './style-market.mjs';
+import {readSourceTypography,freezeSourceFontSizes} from './source-theme.mjs';
+import {slotContract,slotTextIssues,hydratePlaceholderGeometry,TEMPLATE_CONTRACT_VERSION} from './template-slot-contract.mjs';
 import {dataDir} from './library.mjs';
 
 // A reference is a complete page, not a body crop. Its object geometry and
@@ -19,19 +21,19 @@ export async function inspectNativeReference(buffer,name){
  if(order.paths.length>80)throw Error('版式参考PPT最多80页，请先拆分套系');
  const parameters=await extractPptStyle(buffer),pages=[];
  for(const [i,part]of order.paths.entries()){
-  const doc=parse(await zip.file(part).async('string')),slots=[];
+  const doc=parse(await zip.file(part).async('string')),slots=[],typography=await readSourceTypography(zip,part);for(const node of elements(doc,'sp'))hydratePlaceholderGeometry(node,typography);freezeSourceFontSizes(doc,typography);
   for(const node of drawingNodes(doc).flatMap(editableTextTargets)){
-   const text=elements(first(node,'txBody'),'t').map(n=>n.textContent).join(''),box=nodeBounds(node),sizes=elements(node,'rPr').map(n=>+n.getAttribute('sz')/100).filter(Boolean),fontSize=Math.max(0,...sizes),key=slotKey(node);
-   if(!text.trim())continue;
-   const footer=/^\d{1,2}\s*\/\s*\d{1,2}$/.test(text.trim()),symbol=/^[✓✔■▪●→←↑↓↔↕]$/.test(text.trim()),chapter=fontSize>=28&&/^\d+(?:\.\d+)*$/.test(text.trim()),endingTitle=i===order.paths.length-1&&fontSize>=28&&/感谢|谢谢|thank/i.test(text),header=text.trim()==='科研答辩'&&box&&box.y/order.height<.15,institution=box&&box.y/order.height<.15&&/机构名称|机构标识|学校名称/.test(text);
-   slots.push({index:slots.length,key,text,role:footer?'page-number':institution?'institution':chapter?'chapter-number':endingTitle?'ending-title':symbol?'symbol':header?'header-label':fontSize>=28?'title':node.localName==='tc'?'table-cell':'body',fontSizePt:fontSize,sourceFontSizesPt:[...new Set(sizes)],bounds:box,absoluteBounds:absoluteNodeBounds(node),fontFamilies:[...new Set(['ea','latin'].flatMap(k=>elements(node,k).map(n=>n.getAttribute('typeface'))).filter(Boolean))],bold:elements(node,'rPr').some(n=>n.getAttribute('b')==='1'),align:first(node,'pPr')?.getAttribute('algn')||'source-default',verticalAnchor:first(node,'bodyPr')?.getAttribute('anchor')||'source-default',maxChars:Math.max(text.length,footer?10:fontSize>=28?24:8),fixed:footer?true:institution?'institution':symbol?'symbol':chapter?'chapter':endingTitle?'ending-title':header?'header-label':undefined});
+   const text=elements(first(node,'txBody'),'t').map(n=>n.textContent).join(''),capacity=slotContract(node,order),box=capacity.bounds,sizes=capacity.fontSizesPt,fontSize=capacity.fontSizePt,key=slotKey(node),ph=first(node,'ph'),placeholder=ph?{type:ph.getAttribute('type')||'obj',index:ph.getAttribute('idx')||'0'}:undefined;
+   if(!text.trim()&&!placeholder&&node.localName!=='tc'&&first(node,'cNvSpPr')?.getAttribute('txBox')!=='1')continue;
+   const footer=placeholder?.type==='sldNum'||/^\d{1,2}\s*\/\s*\d{1,2}$/.test(text.trim()),symbol=/^[✓✔■▪●→←↑↓↔↕]$/.test(text.trim()),chapter=i>0&&box&&box.y/order.height<.18&&box.x/order.width<.2&&fontSize>=24&&/^\d{1,2}(?:\.\d{1,2})*$/.test(text.trim()),endingTitle=i===order.paths.length-1&&fontSize>=28&&/感谢|谢谢|thank/i.test(text),header=text.trim()==='科研答辩'&&box&&box.y/order.height<.15,institution=box&&box.y/order.height<.15&&/机构名称|机构标识|学校名称/.test(text);
+   slots.push({index:slots.length,key,text,role:footer?'page-number':institution?'institution':chapter?'chapter-number':endingTitle?'ending-title':symbol?'symbol':header?'header-label':['title','ctrTitle'].includes(placeholder?.type)||fontSize>=28&&box?.y/order.height<.25?'title':node.localName==='tc'?'table-cell':'body',fontSizePt:fontSize,sourceFontSizesPt:[...new Set(sizes)],bounds:box,absoluteBounds:box,capacity,placeholder,blank:!text.trim(),fontFamilies:[...new Set(['ea','latin'].flatMap(k=>elements(node,k).map(n=>n.getAttribute('typeface'))).filter(Boolean))],bold:elements(node,'rPr').some(n=>n.getAttribute('b')==='1'),align:first(node,'pPr')?.getAttribute('algn')||'source-default',verticalAnchor:first(node,'bodyPr')?.getAttribute('anchor')||'source-default',maxChars:footer?10:capacity.maxChars,fixed:footer?true:institution?'institution':symbol?'symbol':chapter?'chapter':endingTitle?'ending-title':header?'header-label':undefined});
   }
   const charts=[],rf=zip.file(relPath(part)),rels=rf?parse(await rf.async('string')):null;
   for(const tag of elements(doc,'chart')){const rel=elements(rels,'Relationship').find(r=>r.getAttribute('Id')===tag.getAttribute('r:id'));if(!rel)continue;const target=resolvePart(part,rel.getAttribute('Target')),chart=parse(await zip.file(target).async('string'));const types=['barChart','lineChart','pieChart','scatterChart','areaChart','doughnutChart'].filter(t=>elements(chart,t).length);charts.push({index:charts.length,relationshipId:tag.getAttribute('r:id'),types,title:elements(first(chart,'title')||chart.createElement('title'),'t').map(t=>t.textContent).join(''),editable:true,supported:types.length===1&&['barChart','lineChart','pieChart'].includes(types[0])});}
   const visualObjects=['sp','pic','graphicFrame','cxnSp'].flatMap(type=>elements(doc,type).map(node=>{const props=direct(node,'spPr');return {id:first(node,'cNvPr')?.getAttribute('id'),type,bounds:absoluteNodeBounds(node)||nodeBounds(node),fill:props&&first(direct(props,'solidFill')||props,'srgbClr')?.getAttribute('val'),hasImage:type==='pic',editable:type!=='pic'};}));
-  pages.push({page:i+1,part,visualObjects,images:elements(doc,'pic').length,kind:i===0?'cover':i===order.paths.length-1?'ending':/目录|汇报内容/.test(slots.map(s=>s.text).join(' '))?'agenda':'content',slots,charts,objects:elements(doc,'cNvPr').length-1,tables:elements(doc,'tbl').length});
+  pages.push({page:i+1,part,visualObjects,images:elements(doc,'pic').length,kind:i===0?'cover':slots.some(s=>s.role==='ending-title')?'ending':slots.some(s=>/^(目录|汇报内容|CONTENTS|AGENDA)$/i.test(s.text.trim()))?'agenda':'content',slots,charts,objects:elements(doc,'cNvPr').length-1,tables:elements(doc,'tbl').length});
  }
- return {parameters,pages,width:order.width,height:order.height,name};
+ return {contractVersion:TEMPLATE_CONTRACT_VERSION,templateKind:pages.length<=6?'layout-library':'reference-deck',parameters,pages,width:order.width,height:order.height,name};
 }
 
 export async function registerNativeReference(buffer,name,{privateOwner}={}){
@@ -50,7 +52,7 @@ export async function builtinResearchStyle(base){
 export function validateNativeBindings(referencePage,bindings){
  if(!Array.isArray(bindings))throw Error('请提交原生文本槽数组');
  const expected=new Map(referencePage.slots.filter(s=>!s.fixed).map(s=>[s.key,s])),seen=new Set(),issues=[];
- for(const b of bindings){const slot=expected.get(b.key);if(!slot||seen.has(b.key)||typeof b.text!=='string'){issues.push({key:b.key,error:'文本槽不存在、重复或内容不是字符串'});continue;}seen.add(b.key);if(b.text.length>slot.maxChars)issues.push({key:b.key,maxChars:slot.maxChars,actualChars:b.text.length,text:b.text,error:'请精简此槽文案，保持原字号'});}
+ for(const b of bindings){const slot=expected.get(b.key);if(!slot||seen.has(b.key)||typeof b.text!=='string'){issues.push({key:b.key,error:'文本槽不存在、重复或内容不是字符串'});continue;}seen.add(b.key);const overflow=slotTextIssues(slot,b.text);if(overflow)issues.push(overflow);}
  for(const key of expected.keys())if(!seen.has(key))issues.push({key,error:'请提交所有可替换文本槽，缺少信息明确待补充'});
  if(issues.length)throw Object.assign(Error('请一次修复全部文本槽：'+issues.map(v=>v.key+' '+(v.maxChars?'最多'+v.maxChars+'字（当前'+v.actualChars+'字），请精简':v.error)).join('；')),{issues});
  return bindings;

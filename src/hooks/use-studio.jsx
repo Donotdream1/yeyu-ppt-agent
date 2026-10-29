@@ -22,6 +22,7 @@ export function useStudio() {
     [audience, setAudience] = useState("管理层"),
     [pageCount, setPageCount] = useState(0),
     [layoutDensity, setLayoutDensity] = useState(useAuthUser.preferences?.presentation?.layoutDensity || "full"),
+    [inputMode,setInputMode]=useState("document"),
     [mode, setMode] = useState("deepseek"),
     [apiKey, setApiKey] = useState(""),
     [model, setModel] = useState("deepseek-flash"),
@@ -60,8 +61,8 @@ export function useStudio() {
   const [workspaceFolderId,setWorkspaceFolderId]=useState(()=>accountStore.getItem('yeyu-folder')||null);
   const [workspaceFolderName,setWorkspaceFolderName]=useState(()=>accountStore.getItem('yeyu-folder-name')||'');
   useEffect(()=>{if(workspaceFolderId){accountStore.setItem('yeyu-folder',workspaceFolderId);accountStore.setItem('yeyu-folder-name',workspaceFolderName);}else{accountStore.removeItem('yeyu-folder');accountStore.removeItem('yeyu-folder-name');}},[workspaceFolderId,workspaceFolderName]);
-  function openProjectDraft(id,name){let draft={};try{draft=JSON.parse(accountStore.getItem('yeyu-project-'+id)||'{}');}catch{}setWorkspaceFolderId(id);setWorkspaceFolderName(name);setDocument(draft.document||'');setDocName(draft.docName||'');setTitle(draft.title||'');setRequirements(draft.requirements||'');setDocHash(draft.docHash||'');setStyleSkillId(draft.styleSkillId||styleSkillId);}
-  useEffect(()=>{if(workspaceFolderId)accountStore.setItem('yeyu-project-'+workspaceFolderId,JSON.stringify({document,docName,title,requirements,docHash,styleSkillId}));},[workspaceFolderId,document,docName,title,requirements,docHash,styleSkillId]);
+  function openProjectDraft(id,name){let draft={};try{draft=JSON.parse(accountStore.getItem('yeyu-project-'+id)||'{}');}catch{}setWorkspaceFolderId(id);setWorkspaceFolderName(name);setDocument(draft.document||'');setInputMode(draft.inputMode||'document');setDocName(draft.docName||'');setTitle(draft.title||'');setRequirements(draft.requirements||'');setDocHash(draft.docHash||'');setStyleSkillId(draft.styleSkillId||styleSkillId);}
+  useEffect(()=>{if(workspaceFolderId)accountStore.setItem('yeyu-project-'+workspaceFolderId,JSON.stringify({document,inputMode,docName,title,requirements,docHash,styleSkillId}));},[workspaceFolderId,document,inputMode,docName,title,requirements,docHash,styleSkillId]);
   const [pageWorkBusy,setPageWorkBusy]=useState(false);
   const [photoTargetPreview,setPhotoTargetPreview]=useState(null);
   const [jobSnapshot, setJobSnapshot] = useState(null),
@@ -158,7 +159,7 @@ export function useStudio() {
         ),
         old = JSON.parse(accountStore.getItem("shiye-draft") || "null");
       if (saved) {
-        setDocument(saved.document || "");
+        setDocument(saved.document || "");setInputMode(saved.inputMode||"document");
         setTitle(saved.title || "");
         setRequirements(saved.requirements || "");
         setChartRequest(saved.chartRequest || "");
@@ -178,6 +179,7 @@ export function useStudio() {
         "shiye-auto-draft",
         JSON.stringify({
           document,
+          inputMode,
           title,
           requirements,
           chartRequest,
@@ -187,7 +189,7 @@ export function useStudio() {
         }),
       );
     } catch {}
-  }, [document, title, requirements, chartRequest, audience, pageCount, mode]);
+  }, [document, inputMode,title, requirements, chartRequest, audience, pageCount, mode]);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(""), 4200);
@@ -377,7 +379,7 @@ export function useStudio() {
       const f = new FormData();
       f.append("file", file);if(projectId)f.append("workspaceFolderId",projectId);
       const d = await api("/api/documents", { method: "POST", body: f });
-      setDocument(d.text);
+      setDocument(d.text);setInputMode('document');
       setDocName(d.name);
       setDocHash(d.sha256 || "");
       setToast(`已读取 ${d.characters.toLocaleString()} 字`);
@@ -447,6 +449,8 @@ export function useStudio() {
         paletteSourceId,
         userColors: paletteMode === "user" ? userColors : undefined,
         institutionName,
+        inputMode,
+        topic:inputMode==="topic"?document.trim():undefined,
         document: [
           ...(docHash ? [`文档文件：${docName}，SHA256：${docHash}`] : []),
           document,
@@ -673,6 +677,8 @@ export function useStudio() {
     templateId,
     setTemplateId,
     document,
+    inputMode,
+    setInputMode:next=>{if(next===inputMode)return;accountStore.setItem('yeyu-input-'+(workspaceFolderId||'global')+'-'+inputMode,JSON.stringify({document,docName,docHash,title}));let saved={};try{saved=JSON.parse(accountStore.getItem('yeyu-input-'+(workspaceFolderId||'global')+'-'+next)||'{}');}catch{}setInputMode(next);setDocument(saved.document||'');setDocName(saved.docName||'');setDocHash(saved.docHash||'');setTitle(saved.title||'');},
     setDocument,
     docName,
     setDocName,

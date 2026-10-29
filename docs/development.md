@@ -42,6 +42,12 @@ development decks are intentionally absent from public source.
 
 ## Releases
 
+After a production frontend build, `node scripts/verify-collaboration-http.mjs`
+creates isolated synthetic accounts, starts a temporary server and uses two
+Playwright browser sessions to check membership, viewer source privacy,
+editor access without deletion rights, SSE slide following, comments and
+revocation. No external cloud service, paid model or personal deck is called.
+
 Keep source, installation instructions and `.env.example` consistent. Run tests
 from a clean checkout without a personal `data/` directory. Preserve the vendor
 license and review new dependencies. Never archive `data/`, runtime downloads,

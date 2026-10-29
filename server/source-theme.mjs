@@ -35,9 +35,10 @@ export async function readSourceTypography(zip,slidePart){
   const presentation=zip.file('ppt/presentation.xml');return {layers,defaultTextStyle:presentation?safeFirst(parse(await presentation.async('string')),'defaultTextStyle'):undefined};
  })();cache.set(slidePart,pending);pending.catch(()=>{if(cache.get(slidePart)===pending)cache.delete(slidePart);});return pending;
 }
-function paragraphDefault(body,index,level){
+function paragraphDefault(body,index,level,allowExplicit=false){
  const paragraphs=Array.from(body?.childNodes||[]).filter(n=>n.localName==='p'),paragraph=paragraphs[Math.min(index,paragraphs.length-1)];
- return sizeOf(direct(direct(paragraph,'pPr'),'defRPr'))||sizeOf(direct(direct(direct(body,'lstStyle'),'lvl'+(level+1)+'pPr'),'defRPr'));
+ const explicit=[...new Set((paragraph?elements(paragraph,'rPr'):[]).map(sizeOf).filter(Boolean))];
+ return sizeOf(direct(direct(paragraph,'pPr'),'defRPr'))||sizeOf(direct(direct(direct(body,'lstStyle'),'lvl'+(level+1)+'pPr'),'defRPr'))||(allowExplicit&&explicit.length===1?explicit[0]:null);
 }
 function matchingPlaceholder(doc,ph){
  const placeholders=elements(doc,'sp').map(shape=>({shape,ph:safeFirst(shape,'ph')})).filter(v=>v.ph);
@@ -56,7 +57,7 @@ export function freezeSourceFontSizes(node,context){
   const paragraphs=Array.from(body.childNodes||[]).filter(n=>n.localName==='p');
   for(const [index,paragraph]of paragraphs.entries()){
    const level=Math.max(0,Math.min(8,Number(direct(paragraph,'pPr')?.getAttribute('lvl')||0)));
-   const inheritedSize=paragraphDefault(body,index,level)||inherited.map(tx=>paragraphDefault(tx,index,level)).find(Boolean)||sizeOf(direct(direct(style,'lvl'+(level+1)+'pPr'),'defRPr'))||sizeOf(direct(direct(context?.defaultTextStyle,'lvl'+(level+1)+'pPr'),'defRPr'));
+   const inheritedSize=paragraphDefault(body,index,level)||inherited.map(tx=>paragraphDefault(tx,index,level,true)).find(Boolean)||sizeOf(direct(direct(style,'lvl'+(level+1)+'pPr'),'defRPr'))||sizeOf(direct(direct(context?.defaultTextStyle,'lvl'+(level+1)+'pPr'),'defRPr'));
    const runs=Array.from(paragraph.childNodes).filter(n=>['r','fld'].includes(n.localName));
    const explicit=Array.from(new Set(runs.map(r=>sizeOf(direct(r,'rPr'))).filter(Boolean)));
    // A declared run size is an unambiguous source default for an empty tail.

@@ -36,7 +36,7 @@ export async function makeComposition(body,onPhase=()=>{},onPlan=()=>{},executio
   for(const slide of plan.slides)if(slide.chart)slide.chart=prepareChart(slide.chart,input.document,input.sourceName);
   plan=await designWithMaterials(plan,catalog.items,{...input,onPhase});
   const composition=autoCompose({...plan,referenceId:input.referenceId,layoutDensity:input.layoutDensity,materialScope:input.materialScope},template,catalog.items);
-  return {...composition,sourceText:input.document,sourceName:input.sourceName,inputProfiles:input.sourceProfiles,pageDecision:input.pageCount?`按要求生成 ${input.pageCount} 页`:`根据文档结构自动规划 ${plan.slides.length} 页`,engine:plan.engine};
+  return {...composition,sourceText:input.document,sourceName:input.sourceName,sourceProvenance:input.sourceProvenance,inputProfiles:input.sourceProfiles,pageDecision:input.pageCount?`按要求生成 ${input.pageCount} 页`:`根据文档结构自动规划 ${plan.slides.length} 页`,engine:plan.engine};
 }
 function csv(data){const quote=v=>'"'+String(v??'').replaceAll('"','""')+'"';const keys=['x','series','value','axis','unit','mark','row','source_rows','sourceQuote'];return '\uFEFF'+keys.map(quote).join(',')+'\n'+data.records.map(r=>keys.map(k=>quote(r[k])).join(',')).join('\n');}
 export async function saveComposition(body,{onPhase=()=>{},requireNativeCheck=false}={}){

@@ -1,0 +1,24 @@
+// Optional export copies. Credentials are request-scoped; source files and local
+// collaboration permissions are never replaced with cloud conversion results.
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {dataDir} from './library.mjs';
+const pptMime='application/vnd.openxmlformats-officedocument.presentationml.presentation';
+const fail=message=>Object.assign(Error(message),{status:400});
+function credential(token){if(typeof token!=='string'||token.length<10||token.length>4096||/[\r\n]/.test(token))throw fail('请提供有效的访问令牌');return {'Authorization':'Bearer '+token};}
+async function jsonResponse(response,provider){if(!response.ok)throw fail(provider+'请求失败（HTTP '+response.status+'），请检查令牌、权限和服务可达性');let value;try{value=await response.json();}catch{throw fail(provider+'返回了无效响应');}if(provider==='飞书'&&value.code!==0)throw fail('飞书请求失败（code '+value.code+'），请检查应用权限与令牌');return value;}
+export async function exportGoogleSlides({buffer,title,token},{fetchImpl=fetch}={}){
+ const headers=credential(token),start=await fetchImpl('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink',{method:'POST',redirect:'error',headers:{...headers,'Content-Type':'application/json','X-Upload-Content-Type':pptMime,'X-Upload-Content-Length':String(buffer.length)},body:JSON.stringify({name:title,mimeType:'application/vnd.google-apps.presentation'}),signal:AbortSignal.timeout(30000)});
+ if(!start.ok)throw fail('Google创建上传会话失败（HTTP '+start.status+'）');let session;try{session=new URL(start.headers.get('location'));}catch{throw fail('Google未返回上传会话');}if(session.protocol!=='https:'||session.hostname!=='www.googleapis.com'||!session.pathname.startsWith('/upload/drive/'))throw fail('Google上传会话地址无效');
+ const result=await jsonResponse(await fetchImpl(session.href,{method:'PUT',redirect:'error',headers:{...headers,'Content-Type':pptMime,'Content-Length':String(buffer.length)},body:buffer,signal:AbortSignal.timeout(120000)}),'Google');if(!/^[a-zA-Z0-9_-]+$/.test(result.id||''))throw fail('Google未返回演示编号');return {provider:'google',ready:true,id:result.id,url:'https://docs.google.com/presentation/d/'+result.id+'/edit'};
+}
+export async function exportLarkSlides({buffer,title,token,ticket,region='feishu'},{fetchImpl=fetch}={}){
+ const origin=region==='lark'?'https://open.larksuite.com':'https://open.feishu.cn',headers=credential(token),call=async(endpoint,body)=>{const response=await fetchImpl(origin+'/open-apis/drive/v1/'+endpoint,{method:body?'POST':'GET',redirect:'error',headers:{...headers,...(body&&! (body instanceof FormData)?{'Content-Type':'application/json'}:{})},...(body?{body:body instanceof FormData?body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(120000)});return (await jsonResponse(response,'飞书')).data||{};};
+ if(!ticket){if(buffer.length>20*1024*1024)throw fail('飞书连接当前支持20MB以内PPT，请下载文件后在飞书手动导入');const form=new FormData();form.set('file_name',title+'.pptx');form.set('parent_type','ccm_import_open');form.set('size',String(buffer.length));form.set('extra',JSON.stringify({obj_type:'slides',file_extension:'pptx'}));form.set('file',new Blob([buffer],{type:pptMime}),title+'.pptx');const upload=await call('medias/upload_all',form);if(!upload.file_token)throw fail('飞书未返回上传凭据');const task=await call('import_tasks',{file_extension:'pptx',file_token:upload.file_token,type:'slides',file_name:title,point:{mount_type:1,mount_key:''}});ticket=task.ticket;}
+ if(typeof ticket!=='string'||!/^[a-zA-Z0-9_-]{1,200}$/.test(ticket))throw fail('飞书导入任务编号无效');const status=await call('import_tasks/'+ticket),result=status.result||status;
+ if(![0,1,2].includes(result.job_status))throw fail('飞书导入失败（状态 '+result.job_status+'），原本地PPT保留');const ready=result.job_status===0&&Boolean(result.token);let url;if(ready&&result.url){try{const candidate=new URL(result.url);if(candidate.protocol==='https:'&&/(^|\.)(feishu\.cn|larksuite\.com)$/.test(candidate.hostname))url=candidate.href;}catch{}}
+ return {provider:region,ready,ticket,status:result.job_status,...(url?{url}:{})};
+}
+export function installSlidesConnectors(app,auth){
+ app.post('/api/slides-connectors/export',async(req,res)=>{const {outputId,provider,token,ticket}=req.body;if(typeof outputId!=='string'||!/^[a-f0-9-]{36}$/i.test(outputId)||!['google','feishu','lark'].includes(provider))throw fail('请选择有效作品和连接');if(!await auth.owns('outputs',outputId,req.user))return res.status(403).json({error:'只有作品拥有者可以发送云端副本'});const info=JSON.parse(await fs.readFile(path.join(dataDir,'outputs',outputId+'.json'),'utf8'));const buffer=provider!=='google'&&ticket?null:await fs.readFile(path.join(dataDir,'outputs',outputId+'.pptx'));res.set('Cache-Control','no-store').json(provider==='google'?await exportGoogleSlides({buffer,title:info.title,token}):await exportLarkSlides({buffer,title:info.title,token,ticket,region:provider}));});
+}

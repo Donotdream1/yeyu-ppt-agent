@@ -7,6 +7,8 @@ export function agendaItemCount(c){
 export function duplicateMaterialPages(slides){
  const seen=new Map(),issues=[];
  for(const [i,s]of slides.entries()){
+  // A reusable output layout is a container, not a repeated selected material.
+  if(s.materialSnapshot?.nativeReference&&s.materialSnapshot?.templateReusable===true)continue;
   if(s.chart||!s.materialId)continue;const key=materialIdentity(s.materialSnapshot)||s.materialId;
   if(seen.has(key))issues.push(`第 ${seen.get(key)}、${i+1} 页使用了同一页素材，请更换其中一页`);else seen.set(key,i+1);
  }

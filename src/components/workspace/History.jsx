@@ -12,6 +12,7 @@ import {Skeleton} from '@/components/ui/skeleton';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '@/components/ui/dialog';
 import ProjectCreateDialog from './ProjectCreateDialog';
 import SlideImage from './SlideImage';
+import SharedPresentations from './SharedPresentations';
 export const notifyLibraryChange=()=>window.dispatchEvent(new Event('yeyu-library-change'));
 export default function History({onOpen,onNew,disabled,compact=false}){
  const store=accountStorage(useAuth()?.user,'session'),saved=useRef(null);if(saved.current===null){try{saved.current=JSON.parse(store.getItem(compact?'history-compact-view':'history-view')||'{}');}catch{saved.current={};}}
@@ -32,6 +33,7 @@ export default function History({onOpen,onNew,disabled,compact=false}){
    <Button variant="outline" size="sm" onClick={()=>{setCreating(true);}}><FolderPlus size={15}/>新建文件夹</Button>
   </div>}
   <div className="resource-toolbar">
+   {!compact&&<SharedPresentations/>}
    <div className="search-field"><Search size={17}/><Input aria-label="搜索历史作品" placeholder="搜索作品名称" value={query} onChange={e=>{setQuery(e.target.value);setPage(1);}}/></div>
    <span>{data.total} 份作品</span>
    <Button variant="outline" aria-label="刷新作品" onClick={()=>setRevision(n=>n+1)}><RefreshCw className={loading?'animate-spin':''}/>刷新</Button>

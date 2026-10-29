@@ -7,6 +7,7 @@ export const journeySteps = [
 export function preparationKey(value) {
   return JSON.stringify({
     document: value.document,
+    inputMode:value.inputMode||'document',
     title: value.title,
     requirements: value.requirements,
     audience: value.audience,
@@ -26,8 +27,8 @@ export function preparationKey(value) {
 }
 export function preparationIssues(value) {
   const issues = [];
-  if (String(value.document || "").trim().length < 20)
-    issues.push("请上传文档，或粘贴至少20字的内容");
+  if (String(value.document || "").trim().length < (value.inputMode==="topic"?2:20))
+    issues.push(value.inputMode==="topic"?"请输入至少2字的演示主题":"请上传文档，或粘贴至少20字的内容");
   if (!value.templateId) issues.push("请选择用于输出的PPT模板");
   if (!value.apiKey && !value.studio?.hasKey)
     issues.push("请在模型设置中添加并启用模型连接");

@@ -39,6 +39,7 @@ server/bootstrap-v2.mjs
 !/scripts/test-unit.mjs
 !/scripts/test-fixtures.mjs
 !/scripts/verify-model-quota-http.mjs
+!/scripts/verify-collaboration-http.mjs
 !/scripts/test-trash-ui.mjs
 /docs/*
 !/docs/installation.md
@@ -46,5 +47,6 @@ server/bootstrap-v2.mjs
 !/docs/development.md
 !/docs/configuration.md
 !/docs/user-model-connections.md
+!/docs/slides-workflow.md
 !/docs/screenshots/
 !/docs/screenshots/**
