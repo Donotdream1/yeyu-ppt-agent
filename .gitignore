@@ -17,6 +17,7 @@ __pycache__/
 Thumbs.db
 playwright-report/
 coverage/
+artifacts/
 agents/vendor-skills/
 server/bootstrap-v2.mjs
 *.pptx
@@ -42,6 +43,12 @@ server/bootstrap-v2.mjs
 !/scripts/verify-collaboration-http.mjs
 !/scripts/verify-template-office.mjs
 !/scripts/test-trash-ui.mjs
+!/scripts/capture-manual-ui.mjs
+!/scripts/prepare-source-listing.mjs
+!/scripts/build-software-docs.py
+!/scripts/render-manual-word.ps1
+!/scripts/verify-software-docs.py
+!/scripts/requirements-docs.txt
 /docs/*
 !/docs/installation.md
 !/docs/architecture.md
@@ -49,5 +56,8 @@ server/bootstrap-v2.mjs
 !/docs/configuration.md
 !/docs/user-model-connections.md
 !/docs/slides-workflow.md
+!/docs/software-copyright.md
+!/docs/manual/
+!/docs/manual/**
 !/docs/screenshots/
 !/docs/screenshots/**

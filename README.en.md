@@ -2,6 +2,8 @@
 
 [中文](README.md) · [Installation](docs/installation.md) · [Architecture](docs/architecture.md) · [Contributing](CONTRIBUTING.md)
 
+[User manual in Chinese](docs/manual/software-manual.md) · [Software documentation and source deposit](docs/software-copyright.md)
+
 Yeyu turns documents into editable presentations using your own PPTX templates
 and native material library. Hermes coordinates planning, material selection,
 per-page writing and validation. Continue improving each slide through a page

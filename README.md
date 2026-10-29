@@ -6,6 +6,8 @@
 
 [English](README.en.md) · [安装](docs/installation.md) · [架构](docs/architecture.md) · [配置](docs/configuration.md) · [贡献](CONTRIBUTING.md)
 
+[完整使用说明书](docs/manual/software-manual.md) · [软件说明书与源程序材料](docs/software-copyright.md)
+
 [![CI](https://github.com/Donotdream1/yeyu-ppt-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Donotdream1/yeyu-ppt-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -58,7 +60,7 @@ flowchart LR
   G --> E
 ```
 
-章节数由文档或用户目录决定，不固定四项；目录、正文编号和页眉导航保持对应。字号优先沿用素材，中文字体按用户要求统一；溢出先精简或换版。用户明确选定的素材不会被自动换掉。
+章节数由文档或用户目录决定，不固定四项；目录、正文编号和页眉导航保持对应。字号优先沿用素材，中文字体按用户要求统一；溢出先精简或换版。人工选定的素材默认保留；在用户已授权的溢出修复中，可换版，无适配候选时用同套系原生模块生成本页模板，再检查后导出。
 
 普通用户默认累计成功生成5份新稿，管理员可调整；失败释放预留，修改已有作品不重复计数，删除作品不返还已使用额度。配置自己的模型 Key 不自动取消应用额度。
 
