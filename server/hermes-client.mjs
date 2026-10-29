@@ -4,12 +4,13 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import readline from 'node:readline';
 import {dataDir} from './library.mjs';
+import {hermesRuntimePaths,inspectHermesRuntime,requireHermesRuntime} from './hermes-runtime.mjs';
 
-export const HERMES_SOURCE=path.resolve(process.env.HERMES_SOURCE_PATH||path.join(dataDir,'hermes-agent'));
-export const HERMES_PYTHON=process.env.HERMES_PYTHON||path.join(dataDir,'hermes-runtime','Scripts','python.exe');
+export const HERMES_SOURCE=hermesRuntimePaths().sourcePath;
+export const HERMES_PYTHON=hermesRuntimePaths().pythonPath;
 export async function hermesRuntimeStatus(){
- const checks=await Promise.all([fs.access(HERMES_PYTHON).then(()=>true,()=>false),fs.access(path.join(HERMES_SOURCE,'run_agent.py')).then(()=>true,()=>false)]);
- return {available:checks.every(Boolean),engine:'Hermes AIAgent',model:currentModelConnection()?.model||'DeepSeek',skills:['template-design','page-edit','ppt-writing','chart-drawing','material-use','layout-review','harness-review','presentation-style','research-defense-layout']};
+ const runtime=await inspectHermesRuntime();
+ return {available:runtime.available,diagnostics:{pythonExists:runtime.pythonExists,missingSourceFiles:runtime.missingSourceFiles},engine:'Hermes AIAgent',model:currentModelConnection()?.model||'DeepSeek',skills:['template-design','page-edit','ppt-writing','chart-drawing','material-use','layout-review','harness-review','presentation-style','research-defense-layout']};
 }
 export function summarizeHermesLog(log){
  const lines=String(log).split('\n').filter(s=>/API call #\d+/.test(s)),number=(s,key)=>Number(s.match(new RegExp('(?:^|[ ,])'+key+'=(\\d+)'))?.[1]||0);
@@ -22,6 +23,7 @@ export function acceptedToolPages(result){
  return result.pages.filter(p=>p!==null&&typeof p==='object'&&Number.isInteger(p.page)&&p.page>0&&p.ok!==false&&!p.error&&!p.issues?.length).map(p=>p.page);
 }
 export async function runHermes({id,apiKey,model,systemPrompt,message,tools,onTool,probe=false,prompts={},maxIterations=45,maxTokens=26000,timeoutMs=900000,completeWhen,onMetrics=()=>{},role='coordinator',allowSkillTool=true,images=[],onVision=()=>{}}){
+ const runtime=await requireHermesRuntime();
  const connection=currentModelConnection();if(connection){apiKey=connection.apiKey;model=connection.model;}
  const started=Date.now(),metrics={role,runId:id,toolCalls:0,toolFailures:0,toolMs:0,systemPromptChars:systemPrompt?.length||0,messageChars:typeof message==='string'?message.length:JSON.stringify(message||'').length,imageCount:images.length};
  const redact=value=>{const serialized=JSON.stringify(value);return serialized&&apiKey?JSON.parse(serialized.split(apiKey).join('[hidden]')):value;};
@@ -32,7 +34,7 @@ export async function runHermes({id,apiKey,model,systemPrompt,message,tools,onTo
  if(allowSkillTool)await fs.cp(path.resolve('agents/skills'),path.join(home,'skills'),{recursive:true});
  for(const [name,prompt]of Object.entries(prompts))if(['ppt-writing','chart-drawing'].includes(name)&&prompt){const refs=path.join(home,'skills',name,'references');await fs.mkdir(refs,{recursive:true});await fs.writeFile(path.join(refs,'user-rules.md'),prompt,'utf8');}
  return new Promise((resolve,reject)=>{
-  const child=spawn(HERMES_PYTHON,['-u',path.resolve('agents/hermes_worker.py')],{cwd:path.resolve('.'),windowsHide:true,env:{...process.env,PYTHONUTF8:'1',PYTHONIOENCODING:'utf-8',HERMES_HOME:home},stdio:['pipe','pipe','pipe']});
+  const child=spawn(runtime.pythonPath,['-u',path.resolve('agents/hermes_worker.py')],{cwd:path.resolve('.'),windowsHide:true,env:{...process.env,PYTHONUTF8:'1',PYTHONIOENCODING:'utf-8',HERMES_HOME:home},stdio:['pipe','pipe','pipe']});
   let finished=false,chain=Promise.resolve(),errors='',finalized=false;
   const awaitFinal=async(event,failure)=>{if(finalized)return;finalized=true;try{try{Object.assign(metrics,summarizeHermesLog(await fs.readFile(path.join(home,'logs','agent.log'),'utf8')));}catch{}metrics.elapsedMs=Date.now()-started;onMetrics({...metrics});const result=redact({...event,metrics});await fs.writeFile(path.join(dataDir,'hermes-runs',id,'final.json'),JSON.stringify(result));if(failure)reject(failure);else resolve(result);}catch(e){reject(e);}};
   const timer=setTimeout(()=>{finished=true;child.kill();const error=new Error('Hermes 子任务超时，已完成页面保存在断点中');void awaitFinal({type:'error',error:error.message},error);},timeoutMs);
@@ -47,6 +49,6 @@ export async function runHermes({id,apiKey,model,systemPrompt,message,tools,onTo
   child.on('error',()=>{finished=true;clearTimeout(timer);const error=new Error('Hermes 运行环境不可用，请检查项目运行时设置');void awaitFinal({type:'error',error:error.message},error);});
   child.on('close',code=>{clearTimeout(timer);if(!finished){finished=true;const error=new Error(`Hermes 任务退出（${code}），原稿已保留`);void awaitFinal({type:'error',error:error.message},error);}});
   child.stdin.on('error',()=>{});
-  child.stdin.write(JSON.stringify({sourcePath:HERMES_SOURCE,hermesHome:home,workspace:path.resolve('.'),baseUrl:connection?.baseUrl||'https://api.deepseek.com',apiKey,model,systemPrompt,message,tools,probe,maxIterations,maxTokens,allowSkillTool,images})+'\n');
+  child.stdin.write(JSON.stringify({sourcePath:runtime.sourcePath,hermesHome:home,workspace:path.resolve('.'),baseUrl:connection?.baseUrl||'https://api.deepseek.com',apiKey,model,systemPrompt,message,tools,probe,maxIterations,maxTokens,allowSkillTool,images})+'\n');
  });
 }

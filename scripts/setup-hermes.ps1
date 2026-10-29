@@ -13,7 +13,9 @@ if(-not $HermesSource){
   if($LASTEXITCODE -ne 0){throw '无法检出指定的 Hermes 版本'}
  }
 }
-if(-not (Test-Path -LiteralPath (Join-Path $HermesSource 'run_agent.py'))){throw '请指定有效的 Hermes 源码目录；安装失败留下的空目录需先检查后移除再重试'}
+foreach($requiredFile in @('hermes_bootstrap.py','run_agent.py','tools/registry.py','tools/skills_tool.py')){
+ if(-not (Test-Path -LiteralPath (Join-Path $HermesSource $requiredFile) -PathType Leaf)){throw ('Hermes 源码目录不完整，缺少 '+$requiredFile+'；请指定包含启动模块和 tools 的仓库根目录。')}
+}
 $runtime=Join-Path $workspace 'data/hermes-runtime'
 if(-not (Test-Path -LiteralPath (Join-Path $runtime 'Scripts/python.exe'))){
  & uv venv --python $Python $runtime

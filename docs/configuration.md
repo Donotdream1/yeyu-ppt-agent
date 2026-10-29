@@ -11,6 +11,14 @@ Copy `.env.example` to `.env`; never commit the resulting file.
 | `LIBRARY_PATH` | Optional directory for CLI imports; no personal path is preconfigured |
 | `HERMES_SOURCE_PATH` | `data/hermes-agent` under the repository |
 | `HERMES_PYTHON` | `data/hermes-runtime/Scripts/python.exe` |
+
+`HERMES_SOURCE_PATH` must point to the Hermes repository root containing
+`hermes_bootstrap.py`, `run_agent.py`, `tools/registry.py` and
+`tools/skills_tool.py`. A directory with only `run_agent.py` is incomplete.
+The runtime loads `.env` itself and checks these files before each worker starts.
+Run `npm run doctor` to diagnose missing source files or the Python interpreter;
+after changing environment settings, restart the Node service and resume the
+saved task instead of discarding it.
 | `HERMES_CONCURRENCY` | `4`; page workers bounded by the scheduler, Office stays serial |
 | `PROJECTS_ROOT` | Optional parent location for account-owned project folders |
 

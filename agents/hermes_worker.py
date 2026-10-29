@@ -144,7 +144,11 @@ class NativeVisionObserver:
 def main():
     global VISION_REPORTER
     request = json.loads(sys.stdin.readline())
-    sys.path.insert(0, request['sourcePath'])
+    source = Path(request['sourcePath']).resolve()
+    missing = [name for name in ('hermes_bootstrap.py', 'run_agent.py', 'tools/registry.py', 'tools/skills_tool.py') if not (source / name).is_file()]
+    if missing:
+        raise RuntimeError('Hermes 源码目录不完整，缺少 ' + '、'.join(missing) + '。请检查 HERMES_SOURCE_PATH 是否指向仓库根目录。')
+    sys.path.insert(0, str(source))
     os.environ['HERMES_HOME'] = request['hermesHome']
     os.environ['HERMES_SKIP_BACKGROUND_REVIEW'] = '1'
     with contextlib.redirect_stdout(sys.stderr):
