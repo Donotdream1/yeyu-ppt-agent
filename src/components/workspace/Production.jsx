@@ -45,7 +45,7 @@ export default function Production({ s, planning = false }) {
     failed = job?.status === "failed",
     done = p.completedPages || [],
     total = p.totalPages || s.liveOutline?.slides?.length || 0,
-    issues = p.failedPages || [];
+    issues = job?.recovery?.status==='ready'?[]:p.failedPages || [];
   useEffect(()=>{if(failed)setRecoveryPage(issues[0]?.page||null);},[job?.id,failed]);
   return (
     <div className={failed?'production-with-recovery':'production-layout'}>
@@ -121,10 +121,12 @@ export default function Production({ s, planning = false }) {
         )}
         {failed && (
           <div className="production-recovery">
-            <p>{job.error || s.error}</p>
+            {job.recovery?.status==='ready'&&<strong>Hermes 启动环境已恢复</strong>}
+            <p>{job.recovery?.message || job.error || s.error}</p>
+            {job.recovery?.originalError&&<details><summary>查看此前错误</summary><p>{job.recovery.originalError}</p></details>}
             <Button onClick={s.resumeJob} disabled={s.resuming || !!s.busy}>
               <RefreshCw className={s.resuming ? "animate-spin" : ""} />
-              继续完成剩余页面
+              {job.recovery?.status==='ready'?'继续生成':'继续完成剩余页面'}
             </Button>
           </div>
         )}
@@ -177,7 +179,7 @@ export default function Production({ s, planning = false }) {
         </p>
       </CardContent>
     </Card>
-    {failed&&<FailureDesignPanel s={s} page={recoveryPage} onPageChange={setRecoveryPage}/>}
+    {failed&&job?.recovery?.status!=='ready'&&<FailureDesignPanel s={s} page={recoveryPage} onPageChange={setRecoveryPage}/>}
     {!planning&&job?.id&&<CompletedPagePreview job={job}/>}
     </div>
   );

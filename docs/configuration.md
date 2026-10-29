@@ -19,6 +19,12 @@ The runtime loads `.env` itself and checks these files before each worker starts
 Run `npm run doctor` to diagnose missing source files or the Python interpreter;
 after changing environment settings, restart the Node service and resume the
 saved task instead of discarding it.
+
+Previously failed bootstrap tasks keep their original error in the checkpoint.
+When reopening one, the server tests the actual Python import before offering
+the recovered-environment notice. The original error remains expandable in the
+UI; the task stays stopped until “继续生成” is clicked. Completed pages and source
+documents are preserved.
 | `HERMES_CONCURRENCY` | `4`; page workers bounded by the scheduler, Office stays serial |
 | `PROJECTS_ROOT` | Optional parent location for account-owned project folders |
 

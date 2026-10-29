@@ -294,7 +294,7 @@ export function useStudio() {
         }
         if (j.status === "failed") {
           setBusy("");
-          setError(j.error || "任务未完成，可查看已保存的进度");
+          setError(j.recovery?.status==='ready'&&j.resumable?'':j.error || "任务未完成，可查看已保存的进度");
           setJobId("");
           return;
         }

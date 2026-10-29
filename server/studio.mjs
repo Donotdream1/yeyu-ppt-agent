@@ -19,6 +19,7 @@ import {prepareChart,chartForDeck,CHART_RULES} from './charts.mjs';
 import {renderPowerPoint,renderStates} from './render.mjs';
 import {loadWorkflowCheckpoint,publicWorkflowJob,saveWorkflowCheckpoint} from './workflow-checkpoints.mjs';
 import {applyManualDesign} from './workflow-recovery.mjs';
+import {withHermesRuntimeRecovery} from './hermes-recovery.mjs';
 
 export const jobs=new Map();
 export async function resolveTemplate(id){const db=await readLibrary(),template=(db.templates||[]).find(t=>t.id===(id||db.activeTemplateId));if(!template&&/^layout-[a-f0-9-]{36}$/i.test(id||'')){try{return JSON.parse(await fs.readFile(path.join(dataDir,'native-layouts',id+'.json'),'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;}}if(!template)throw new Error('请先上传并选择用户的输出模板 PPT');return {...template,theme:{...template.theme,font:'微软雅黑'}};}
@@ -79,11 +80,11 @@ export function startGeneration(body,{checkpointId,initial}={}){
   void (async()=>{try{const plan=await makeComposition(body,phase=>patch({status:'running',phase}),outline=>patch({status:'running',phase:'逐页方案已就绪，正在制作原生PPT',plan:outline}),{checkpointId:id,resumeCheckpoint:initial,onProgress:progress=>patch({progress})});if(plan.__hermesOutput?.styleOnly){await quota?.finish();patch({status:'done',resumable:false,phase:'风格与配色识别已完成',output:plan.__hermesOutput});return;}if(plan.__hermesOutput?.planningOnly){await quota?.finish();patch({status:'done',resumable:false,phase:'逐页方案已就绪，等待确认后制作',output:plan.__hermesOutput});return;}patch({status:'running',phase:`已规划 ${plan.slides.length} 页，正在重组元素并套用用户模板`});const output=plan.__hermesOutput||await saveComposition(plan,{onPhase:phase=>patch({phase})});await workspaceLibrary.attachKnownJobOutput(id,output);await quota?.finish(output);patch({status:'done',resumable:false,phase:'PPTX 与预览已就绪',output});}catch(e){await quota?.finish();patch({status:'failed',phase:'本轮未完成，已保留制作进度',error:e.message,resumable:Boolean(e.resumable),checkpointId:e.checkpointId||id,...(e.progress?{progress:e.progress}:{})});}})();return {id};
 }
 export async function getGenerationJob(id){
- if(jobs.has(id))return jobs.get(id);
+ if(jobs.has(id))return withHermesRuntimeRecovery(jobs.get(id));
  const checkpoint=await loadWorkflowCheckpoint(id);if(!checkpoint)return null;
  const publicJob=publicWorkflowJob(checkpoint);
  if(publicJob.status==='running')Object.assign(publicJob,{status:'failed',phase:'任务已中断，可从已保存页面继续',resumable:true});
- return publicJob;
+ return withHermesRuntimeRecovery(publicJob);
 }
 const resumeClaims=new Set();
 export async function resumeGeneration(id,{apiKey,manualSelection}={}){
