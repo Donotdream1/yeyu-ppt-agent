@@ -10,6 +10,16 @@ import {indexComponents} from '../server/components.mjs';
 import {indexMaterialLayouts} from '../server/material-layouts.mjs';
 import {styleSkill,applyStyleSkill} from '../server/style-market.mjs';
 import {renderStates} from '../server/render.mjs';
+import {stopTemplateGeneration} from '../server/template-generation.mjs';
+
+test('a stopped template task is saved and cannot be stopped by another member',async()=>{
+ const user={id:'stop-template-'+randomUUID(),role:'member'};let calls=0;
+ const job=await startTemplateGeneration(user,{name:'停止模板测试',requirements:'可编辑工作汇报模板',layoutCount:4},{runAgent:async()=>{calls++;throw Error('stopped task must not reach the model');}});
+ await assert.rejects(stopTemplateGeneration(job.id,{id:'other-member',role:'member'}),{status:403});
+ await stopTemplateGeneration(job.id,user);let current;
+ for(let i=0;i<100;i++){current=await templateGeneration(job.id,user);if(current.status==='stopped')break;await new Promise(r=>setTimeout(r,10));}
+ assert.equal(current.status,'stopped');assert.equal(calls,0);assert.equal(current.error,undefined);assert.equal((await stopTemplateGeneration(job.id,user)).status,'stopped');
+});
 const candidate=(id,page,purpose='content',sourceId='source-a')=>({alias:id,component:{id,sourceId,page,purpose,layout:true,scope:'full',nativeObjects:10,slots:[{key:'shape:1'}],tags:[],relation:purpose==='content'?'parallel':purpose}});
 test('template planning uses real editable components, one palette family and distinct source pages',()=>{
  const input=templateGenerationSchema.parse({name:'我的模板',requirements:'工作汇报模板',layoutCount:4}),pool=[candidate('C1',1,'cover'),candidate('C2',2,'agenda'),candidate('C3',3),candidate('C4',4,'ending')],proposal={styleSummary:'保留同套系的原生色彩与可编辑模块。',pages:pool.map((c,i)=>({title:['封面','目录','三项工作','结束页'][i],purpose:c.component.purpose,candidate:c.alias,reason:'适合展示对应模块',usage:'按原文本框填写对应内容'}))};

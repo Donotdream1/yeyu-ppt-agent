@@ -17,4 +17,14 @@ try{
  for(let i=0;i<900;i++){job=await templateGeneration(start.id,user);if(job.status!=='running')break;await new Promise(r=>setTimeout(r,500));}
  console.log(JSON.stringify({status:job.status,validation:job.validation,error:job.error}));
  await fs.copyFile(path.join(dataDir,'template-generations',job.id,'template.pptx'),path.join(root,'test-output/template-office.pptx'));await fs.cp(path.join(dataDir,'template-generations',job.id,'previews'),path.join(root,'test-output/template-office-previews'),{recursive:true});if(job.status!=='review'||!job.validation.nativeTextChecked||!job.validation.previewReady)throw Error('Office template check did not complete');
+ if(process.argv.includes('--fallback')){
+  const {generatePageTemplate}=await import('../server/page-template-fallback.mjs'),{composeDeck}=await import('../server/composition.mjs'),{composeHermesSlide}=await import('../server/page-layout.mjs'),{resolveTemplate}=await import('../server/studio.mjs'),{fitNativeText}=await import('../server/native-text-fit.mjs'),{renderPowerPoint,renderStates}=await import('../server/render.mjs');
+  const template=await resolveTemplate(job.input.templateId),seed={id:'fallback-office-module',sourceId:source.id,sourceName:'Synthetic template suite.pptx',page:3,part:order.paths[2],width:order.width,height:order.height,nodeIndices:[1,3],type:'group',editable:true,textSlots:2,nativeObjects:2},slide={title:'后续方向',kind:'content',visual:'parallel',bullets:['质量改善','设备维护','人才培养']};
+  const chosen=await generatePageTemplate(slide,{components:[seed],template,sourceId:source.id,runAgent:async o=>o.onTool('ppt_design_page_template',{componentId:seed.id,arrangement:'grid',reason:'三项工作分别展示，保留源配色与字号'})});
+  slide.materialSnapshot=chosen.component;slide.materialBindings=chosen.component.slots.map(s=>({key:s.key,slot:s.index,text:s.fixed||'后续方向',contentIds:['u1','u2','u3']}));slide.adaptation={status:'checked'};
+  const composed=await composeDeck({title:slide.title,slides:[composeHermesSlide(slide,0,template)]},template,[chosen.component]),folder=path.join(directory,'fallback-check');await fs.mkdir(folder);
+  const fit=await fitNativeText(composed.buffer,folder,{audit:composed.audit});if(fit.status!=='checked')throw Error('Fallback template native text check unavailable');
+  const file=path.join(root,'test-output/fallback-template-office.pptx'),previews=path.join(root,'test-output/fallback-template-previews');await fs.writeFile(file,fit.buffer);await renderPowerPoint(file,previews,'fallback-office');if(renderStates.get('fallback-office')?.status!=='ready')throw Error('Fallback template preview not ready');console.log('PASS fallback template: original point sizes, editable native objects, actual Office text check and preview');
+ }
+
 }finally{process.chdir(root);await fs.rm(directory,{recursive:true,force:true});}

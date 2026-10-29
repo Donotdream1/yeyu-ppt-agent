@@ -1,3 +1,4 @@
+import {throwIfTaskStopped} from './task-control.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
@@ -31,7 +32,7 @@ async function inspect(file){
  });
 }
 export async function retryNativeInspection(task,{wait=()=>new Promise(resolve=>setTimeout(resolve,1500)),onRetry=()=>{}}={}){
- try{return await task();}catch(error){if(error.code!=='OFFICE_CHECK_UNAVAILABLE')throw error;onRetry();await wait();return task();}
+ throwIfTaskStopped();try{return await task();}catch(error){if(error.code!=='OFFICE_CHECK_UNAVAILABLE')throw error;onRetry();await wait();throwIfTaskStopped();return task();}
 }
 export function nativeTextOverflowIssues(measurements,audit=[]){
  return measurements.filter(c=>c.overflow||c.size<c.before||c.initialBoundWidth>c.availableWidth+1||c.initialBoundHeight>c.availableHeight+1).map(c=>{

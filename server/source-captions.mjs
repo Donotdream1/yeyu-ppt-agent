@@ -10,6 +10,11 @@ export function isSourceAuxiliaryCaption(slot,component={}){
  if(component.purpose==='ending'&&/^(?:YOUR LOGO|LAO NIAO POWERPOINT|WORK REPORT)$/i.test(String(slot.sample||'').trim()))return true;
  if(agendaComponent(component)&&String(slot.sample||'').replace(/\s+/g,'')==='目录')return true;
  if(agendaComponent(component)&&/^(?:CONTENTS?|Enter your title)$/i.test(String(slot.sample||'').trim()))return true;
+ // An explicit report prefix + matching catalog page title confirms this is
+ // source-page furniture. Top-left position alone must never remove a module.
+ const sampleText=String(slot.sample||'').replace(/\s+/g,''),catalogTitle=String(component.title||'').replace(/^(?:完整组合|主体组件)\s*[·：:]?\s*/,'').replace(/\s+/g,'');
+ const reportHeading=sampleText.match(/^(?:述职报告|工作汇报|工作总结|工作计划|年度总结|年度报告)[：:](.+)$/);
+ if(component.layout&&component.scope==='full'&&p.x>=0&&p.x<.15&&p.y>=0&&p.y<.12&&p.w>=.25&&p.h>0&&p.h<=.12&&Number(slot.font)>=24&&reportHeading&&catalogTitle===reportHeading[1])return true;
  if(!(p.x>=.6&&p.y>=0&&p.y<.14&&p.w>=.1&&p.h>0&&p.h<=.12))return false;
  const declared=slot.sourceHeaderRole||slot.sourceheaderRole||component.sourceHeaderRoles?.[slot.key];
  if(['auxiliary-caption','auxiliary','decorative'].includes(declared))return true;

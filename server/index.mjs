@@ -24,7 +24,8 @@ import {requestSchema,deckSchema,annotationSchema,slideSchema,planDeck,SYSTEM_PR
 import {createDeck} from './ooxml.mjs';
 import {renderSource,renderPowerPoint,renderStates} from './render.mjs';
 import {registerTemplate,configureTemplate,readComponents,indexComponents,componentPreview,annotateComponent} from './components.mjs';
-import {settings,setChartPrompt,setPresentationPrompt,makeComposition,saveComposition,startGeneration,jobs,getGenerationJob,resumeGeneration} from './studio.mjs';
+import {createTaskControl,runWithTaskControl,releaseTaskControl,taskControlState,isTaskStopped,sealTaskCommit} from './task-control.mjs';
+import {settings,setChartPrompt,setPresentationPrompt,makeComposition,saveComposition,startGeneration,jobs,getGenerationJob,resumeGeneration,stopGeneration} from './studio.mjs';
 import {readDataFile} from './data-input.mjs';
 import {indexMaterialLayouts,classifyPurpose} from './material-layouts.mjs';
 import {replacePageMaterial,replaceAndExport} from './page-materials.mjs';
@@ -124,13 +125,15 @@ app.get('/api/jobs/:id',async(req,res)=>{const job=await getGenerationJob(req.pa
 app.get('/api/jobs/:id/recovery',async(req,res)=>res.json(await getWorkflowRecovery(req.params.id,{page:req.query.page,query:req.query.q})));
 app.get('/api/jobs/:id/previews',async(req,res)=>res.json(await getWorkflowPreviews(req.params.id)));
 app.post('/api/jobs/:id/previews',async(req,res)=>res.status(202).json(await getWorkflowPreviews(req.params.id,{start:true})));
+app.post('/api/jobs/:id/stop',async(req,res)=>{if(!await localAuth.owns('jobs',req.params.id,req.user))return res.status(403).json({error:'只能停止自己发起的任务'});res.json(await stopGeneration(req.params.id));});
 app.post('/api/jobs/:id/resume',async(req,res)=>res.status(202).json(await resumeGeneration(req.params.id,{apiKey:req.body.apiKey,manualSelection:req.body.manualSelection})));
 app.get('/api/components/:id/analysis',async(req,res)=>{const catalog=await readComponents(),c=catalog.items.find(c=>c.id===req.params.id);if(!c)throw new Error('素材不存在');const analyzed=await analyzeMaterial(c);res.json({analysis:materialSummary(analyzed),slots:analyzed.slots});});
 app.post('/api/replace-page-material-job',async(req,res)=>{
  const id=randomUUID(),body=req.body;deckSchema.parse(body.plan);
- const phase=text=>jobs.set(id,{id,status:'running',kind:'replace',page:Number(body.page),phase:text});
+ const phase=text=>jobs.set(id,{id,status:taskControlState(id)?.status==='stopping'?'stopping':'running',kind:'replace',page:Number(body.page),phase:taskControlState(id)?.status==='stopping'?'正在停止，等待当前操作安全结束':text});
+ const control=createTaskControl(id,{kind:'replace',onStop:()=>phase('正在停止，等待当前操作安全结束')});
  phase('Hermes 正在加载素材使用与撰写 skills');
- void(async()=>{try{const output=await replaceAndExport(body,phase);jobs.set(id,{id,status:'done',kind:'replace',page:Number(body.page),phase:'Hermes 换版完成，正在生成精确预览',output});}catch(e){jobs.set(id,{id,status:'failed',kind:'replace',page:Number(body.page),phase:'换版未完成，原页面已保留',error:e.message});}})();
+ void runWithTaskControl(control,async()=>{try{const output=await replaceAndExport(body,phase);sealTaskCommit();jobs.set(id,{id,status:'done',kind:'replace',page:Number(body.page),phase:'Hermes 换版完成，正在生成精确预览',output});}catch(e){jobs.set(id,{id,status:isTaskStopped(e)?'stopped':'failed',kind:'replace',page:Number(body.page),phase:isTaskStopped(e)?'已停止，原页面已保留':'换版未完成，原页面已保留',error:isTaskStopped(e)?undefined:e.message});}finally{releaseTaskControl(control);}});
  res.status(202).json({id});
 });
 app.post('/api/replace-page-material',async(req,res)=>res.json(await replaceAndExport(req.body)));

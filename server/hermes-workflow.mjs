@@ -15,6 +15,7 @@ import {auditProjectSkills,reviewWithHarness} from './harness-review.mjs';
 import {nativeChartMatches} from './recommendations.mjs';
 import {randomUUID} from 'node:crypto';
 import {runHermes} from './hermes-client.mjs';
+import {throwIfTaskStopped} from './task-control.mjs';
 import {requestSchema,deckSchema,normalizeModelPlan} from './planner.mjs';
 import {readComponents} from './components.mjs';
 import {rankMaterialLayouts,prepareEditableComponent} from './material-layouts.mjs';
@@ -87,7 +88,7 @@ export async function createHermesSession(body,{onPhase=()=>{},onPlan=()=>{}}={}
  const arrange=()=>{if(plan)for(const n of targets())at(n).narrativeRequested=allowNarrative;if(!replace)return autoCompose({...plan,workflow:'hermes',stylePolicy:'harmonized'},template,catalog.items);const changed=autoCompose({...plan,workflow:'hermes',slides:[plan.slides[Number(body.page)]]},template,catalog.items).slides[0];return {...plan,workflow:'hermes',slides:plan.slides.map((s,i)=>i===Number(body.page)?changed:s)};};
  const reviewRelevance=async(options={})=>{note('ppt_review_content');return reviewContentRelevance(plan,{pages:targets(),document:input.document,apiKey:input.apiKey||modelApiKey(),model:input.model,onPhase,...options});};
  const pageBrief=(s,n)=>({page:n,title:s.title,kind:s.kind,visual:s.visual,units:contentUnits(s),chart:s.chart});
- async function handle(name,args={}){
+ async function handle(name,args={}){throwIfTaskStopped();
   if(name==='skill_loaded'){if(!['ppt-writing','chart-drawing','material-use','layout-review','harness-review','presentation-style'].includes(args.name))throw Error('只允许本项目技能');loaded.add(args.name);note(name,{skill:args.name,reference:args.file_path});return {ok:true};}
   if(body.styleOnly&&!['ppt_get_brief','ppt_palette_candidates','ppt_classify_document','ppt_get_design_profile'].includes(name))throw Error('本次仅识别风格与配色，已禁止大纲、素材改写和PPT导出；完成分类后直接结束。');
   note(name);if(['ppt_submit_outline','ppt_analyze_materials','ppt_allocate_pages','ppt_write_pages','ppt_commit_pages','ppt_prepare_charts','ppt_refine_chart_copy','ppt_set_layouts','ppt_research_pages','ppt_attach_research_assets'].includes(name)){review=null;harnessReport=null;}

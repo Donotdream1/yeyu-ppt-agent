@@ -20,6 +20,7 @@ import {renderPowerPoint,renderStates} from './render.mjs';
 import {loadWorkflowCheckpoint,publicWorkflowJob,saveWorkflowCheckpoint} from './workflow-checkpoints.mjs';
 import {applyManualDesign} from './workflow-recovery.mjs';
 import {withHermesRuntimeRecovery} from './hermes-recovery.mjs';
+import {createTaskControl,runWithTaskControl,releaseTaskControl,requestTaskStop,taskControlState,throwIfTaskStopped,isTaskStopped,sealTaskCommit} from './task-control.mjs';
 
 export const jobs=new Map();
 export async function resolveTemplate(id){const db=await readLibrary(),template=(db.templates||[]).find(t=>t.id===(id||db.activeTemplateId));if(!template&&/^layout-[a-f0-9-]{36}$/i.test(id||'')){try{return JSON.parse(await fs.readFile(path.join(dataDir,'native-layouts',id+'.json'),'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;}}if(!template)throw new Error('请先上传并选择用户的输出模板 PPT');return {...template,theme:{...template.theme,font:'微软雅黑'}};}
@@ -41,14 +42,14 @@ export async function makeComposition(body,onPhase=()=>{},onPlan=()=>{},executio
 }
 function csv(data){const quote=v=>'"'+String(v??'').replaceAll('"','""')+'"';const keys=['x','series','value','axis','unit','mark','row','source_rows','sourceQuote'];return '\uFEFF'+keys.map(quote).join(',')+'\n'+data.records.map(r=>keys.map(k=>quote(r[k])).join(',')).join('\n');}
 export async function saveComposition(body,{onPhase=()=>{},requireNativeCheck=false}={}){
-  const repeated=duplicateMaterialPages(body.slides||[]);if(repeated.length)throw Error(repeated.join('；'));
+  throwIfTaskStopped();const repeated=duplicateMaterialPages(body.slides||[]);if(repeated.length)throw Error(repeated.join('；'));
   const plan=deckSchema.parse(body),baseTemplate=await resolveTemplate(plan.templateId),design=await applyDesignProfile(plan,baseTemplate),template=design.template,catalog=await readComponents();plan.palette=design.palette;
   if(!plan.slides.every(s=>s.blocks?.length))throw new Error('该大纲尚未自动编排，请重新生成或执行自动编排');
   for(const slide of plan.slides)for(const block of slide.blocks)if(block.chart)block.chart=prepareChart(block.chart,plan.sourceText||'',plan.sourceName||'用户文档');
   const out=await composeDeck(plan,template,catalog.items,{chartRenderer:chartForDeck}),id=randomUUID(),bundle=new JSZip();
   const folder=path.join(dataDir,'outputs',id);await fs.mkdir(folder,{recursive:true});
-  onPhase('PowerPoint 正在按素材原字号检查文字边界，溢出时仅精简文案');
-  const fitted=await fitNativeText(out.buffer,folder,{audit:out.audit});out.buffer=fitted.buffer;out.warnings.push(...fitted.warnings);
+  throwIfTaskStopped();onPhase('PowerPoint 正在按素材原字号检查文字边界，溢出时仅精简文案');
+  const fitted=await fitNativeText(out.buffer,folder,{audit:out.audit});throwIfTaskStopped();out.buffer=fitted.buffer;out.warnings.push(...fitted.warnings);
   if(requireNativeCheck&&fitted.status!=='checked'){const error=Error('尚未完成PowerPoint原生文字检查，稿件保留为断点，请确认Office可用后继续');error.code='OFFICE_UNAVAILABLE';throw error;}
   if(plan.designProfile==='research-defense'){const minimum=name=>/Research:(chapter|main-title):/.test(name)?32:/Research:section:/.test(name)?21:/Research:viewpoint:/.test(name)?16:/Research:(module-title|layer-title):/.test(name)?17:/Research:conclusion:/.test(name)?15:/Research:(supplement|evidence):/.test(name)?12:/Research:(body|figure-caption):/.test(name)?14:0;const issues=fitted.corrections.filter(c=>c.size<minimum(c.name||''));if(issues.length){const error=new Error('科研必要内容不能依靠小字，请精简相应字段或调整版式：'+issues.map(c=>`第 ${c.page} 页 ${c.name}「${c.text}」`).join('；'));error.issues=issues;throw error;}}
   const pptxName=plan.title.replace(/[<>:"/\\|?*]/g,'_')+'.pptx';bundle.file(pptxName,out.buffer);
@@ -69,26 +70,33 @@ export async function saveComposition(body,{onPhase=()=>{},requireNativeCheck=fa
   const report={template:{id:template.id,name:template.name,width:template.width,height:template.height},pages:plan.slides.map((s,i)=>({page:i+1,title:s.title,visual:s.visual,templatePage:s.templatePage,components:s.blocks.filter(b=>b.type==='component').map(b=>b.componentId)})),components:out.audit,pageEdits:out.chromeChanges||[],warnings:[...(plan.designWarnings||[]),...out.warnings],charts:chartFiles};
   bundle.file('composition.json',JSON.stringify(report,null,2));await fs.writeFile(path.join(dataDir,'outputs',id+'.pptx'),out.buffer);await fs.writeFile(path.join(dataDir,'outputs',id+'.zip'),await bundle.generateAsync({type:'nodebuffer',compression:'DEFLATE'}));
   const info={id,title:plan.title,pages:plan.slides.length,url:`/api/files/${id}.pptx`,bundleUrl:`/api/bundles/${id}`,template:report.template,charts:chartFiles,warnings:out.warnings,textFit:{status:fitted.status,corrections:fitted.corrections},audit:report.components,pageEdits:report.pageEdits,createdAt:new Date().toISOString(),plan,promptUrl:plan.styleSkillSnapshot?.content?`/api/output-assets/${id}/generation-prompt.md`:undefined,parametersUrl:`/api/output-assets/${id}/design-parameters.json`,pagePlanUrl:`/api/output-assets/${id}/page-plan.json`,harnessReviewUrl:harnessReport?`/api/output-assets/${id}/harness-review.json`:undefined};
-  await fs.writeFile(path.join(dataDir,'outputs',id+'.json'),JSON.stringify(info,null,2));
+  throwIfTaskStopped();
   const renderJob=renderPowerPoint(path.join(dataDir,'outputs',id+'.pptx'),path.join(dataDir,'previews',id),id);
-  if(requireNativeCheck||plan.designProfile==='research-defense'||template.bnaProfile){onPhase('正在导出全页预览、设计参数表与审查报告');await renderJob;const previewDir=path.join(dataDir,'previews',id),files=await fs.readdir(previewDir).catch(()=>[]);if(requireNativeCheck&&(renderStates.get(id)?.status!=='ready'||files.filter(n=>/^\d+\.png$/.test(n)).length!==plan.slides.length))throw Error('PowerPoint全页预览尚未完成，制作进度已保存，请确认Office可用后继续');for(const name of files.filter(n=>/^\d+\.png$/.test(n)))bundle.file('previews/'+name,await fs.readFile(path.join(previewDir,name)));bundle.file('previews/index.html','<!doctype html><meta charset="utf-8"><title>全页预览</title><style>body{background:#eef1f6;margin:30px}img{display:block;max-width:1200px;width:100%;margin:20px auto}</style>'+plan.slides.map((s,i)=>`<img src="${i+1}.png" alt="第${i+1}页">`).join(''));info.render=renderStates.get(id);await fs.writeFile(path.join(dataDir,'outputs',id+'.zip'),await bundle.generateAsync({type:'nodebuffer',compression:'DEFLATE'}));await fs.writeFile(path.join(dataDir,'outputs',id+'.json'),JSON.stringify(info,null,2));}
-  return info;
+  if(requireNativeCheck||plan.designProfile==='research-defense'||template.bnaProfile){onPhase('正在导出全页预览、设计参数表与审查报告');await renderJob;const previewDir=path.join(dataDir,'previews',id),files=await fs.readdir(previewDir).catch(()=>[]);if(requireNativeCheck&&(renderStates.get(id)?.status!=='ready'||files.filter(n=>/^\d+\.png$/.test(n)).length!==plan.slides.length))throw Error('PowerPoint全页预览尚未完成，制作进度已保存，请确认Office可用后继续');for(const name of files.filter(n=>/^\d+\.png$/.test(n)))bundle.file('previews/'+name,await fs.readFile(path.join(previewDir,name)));bundle.file('previews/index.html','<!doctype html><meta charset="utf-8"><title>全页预览</title><style>body{background:#eef1f6;margin:30px}img{display:block;max-width:1200px;width:100%;margin:20px auto}</style>'+plan.slides.map((s,i)=>`<img src="${i+1}.png" alt="第${i+1}页">`).join(''));info.render=renderStates.get(id);await fs.writeFile(path.join(dataDir,'outputs',id+'.zip'),await bundle.generateAsync({type:'nodebuffer',compression:'DEFLATE'}));}
+  sealTaskCommit();await fs.writeFile(path.join(dataDir,'outputs',id+'.json'),JSON.stringify(info,null,2));return info;
 }
 export function startGeneration(body,{checkpointId,initial}={}){
   const quota=currentGenerationQuota();const id=checkpointId||quota?.ticket||randomUUID();jobs.set(id,{...publicWorkflowJob(initial),id,status:'running',error:undefined,checkpointId:id,resumable:false,phase:'规划页面与改写内容',createdAt:initial?.createdAt||new Date().toISOString()});
-  const patch=values=>jobs.set(id,{...jobs.get(id),...values,id});
-  void (async()=>{try{const plan=await makeComposition(body,phase=>patch({status:'running',phase}),outline=>patch({status:'running',phase:'逐页方案已就绪，正在制作原生PPT',plan:outline}),{checkpointId:id,resumeCheckpoint:initial,onProgress:progress=>patch({progress})});if(plan.__hermesOutput?.styleOnly){await quota?.finish();patch({status:'done',resumable:false,phase:'风格与配色识别已完成',output:plan.__hermesOutput});return;}if(plan.__hermesOutput?.planningOnly){await quota?.finish();patch({status:'done',resumable:false,phase:'逐页方案已就绪，等待确认后制作',output:plan.__hermesOutput});return;}patch({status:'running',phase:`已规划 ${plan.slides.length} 页，正在重组元素并套用用户模板`});const output=plan.__hermesOutput||await saveComposition(plan,{onPhase:phase=>patch({phase})});await workspaceLibrary.attachKnownJobOutput(id,output);await quota?.finish(output);patch({status:'done',resumable:false,phase:'PPTX 与预览已就绪',output});}catch(e){await quota?.finish();patch({status:'failed',phase:'本轮未完成，已保留制作进度',error:e.message,resumable:Boolean(e.resumable),checkpointId:e.checkpointId||id,...(e.progress?{progress:e.progress}:{})});}})();return {id};
+  const patch=values=>jobs.set(id,{...jobs.get(id),...values,...(!['done','failed','stopped'].includes(values.status)&&taskControlState(id)?.status==='stopping'?{status:'stopping',phase:'正在停止，等待当前操作安全结束'}:{}),id});
+ const control=createTaskControl(id,{onStop:()=>patch({status:'stopping',phase:'正在停止，等待当前操作安全结束'})});
+  void runWithTaskControl(control,async()=>{try{throwIfTaskStopped();const plan=await makeComposition(body,phase=>patch({status:'running',phase}),outline=>patch({status:'running',phase:'逐页方案已就绪，正在制作原生PPT',plan:outline}),{checkpointId:id,resumeCheckpoint:initial,onProgress:progress=>patch({progress})});throwIfTaskStopped();if(plan.__hermesOutput?.styleOnly){sealTaskCommit();await quota?.finish();patch({status:'done',resumable:false,phase:'风格与配色识别已完成',output:plan.__hermesOutput});return;}if(plan.__hermesOutput?.planningOnly){sealTaskCommit();await quota?.finish();patch({status:'done',resumable:false,phase:'逐页方案已就绪，等待确认后制作',output:plan.__hermesOutput});return;}patch({status:'running',phase:`已规划 ${plan.slides.length} 页，正在重组元素并套用用户模板`});const output=plan.__hermesOutput||await saveComposition(plan,{onPhase:phase=>patch({phase})});sealTaskCommit();await workspaceLibrary.attachKnownJobOutput(id,output);await quota?.finish(output);patch({status:'done',resumable:false,phase:'PPTX 与预览已就绪',output});}catch(e){if(isTaskStopped(e)){const previous=await loadWorkflowCheckpoint(id);await saveWorkflowCheckpoint(id,{...previous,body:previous?.body||body,status:'stopped',phase:'已停止，进度已保存',error:undefined,resumable:true,progress:e.progress||previous?.progress||jobs.get(id)?.progress});await quota?.finish();patch({status:'stopped',phase:'已停止，进度已保存',error:undefined,resumable:true,progress:e.progress||previous?.progress||jobs.get(id)?.progress});return;}await quota?.finish();patch({status:'failed',phase:'本轮未完成，已保留制作进度',error:e.message,resumable:Boolean(e.resumable),checkpointId:e.checkpointId||id,...(e.progress?{progress:e.progress}:{})});}finally{releaseTaskControl(control);}});return {id};
 }
 export async function getGenerationJob(id){
  if(jobs.has(id))return withHermesRuntimeRecovery(jobs.get(id));
  const checkpoint=await loadWorkflowCheckpoint(id);if(!checkpoint)return null;
  const publicJob=publicWorkflowJob(checkpoint);
- if(publicJob.status==='running')Object.assign(publicJob,{status:'failed',phase:'任务已中断，可从已保存页面继续',resumable:true});
+ if(['running','stopping'].includes(publicJob.status))Object.assign(publicJob,{status:'failed',phase:'任务已中断，可从已保存页面继续',resumable:true});
  return withHermesRuntimeRecovery(publicJob);
+}
+export async function stopGeneration(id){
+ const stopping=await requestTaskStop(id);if(stopping)return stopping;
+ const job=await getGenerationJob(id);if(!job)throw Object.assign(Error('任务不存在'),{status:404});
+ if(['done','failed','stopped'].includes(job.status))return {id,status:job.status};
+ throw Object.assign(Error('当前任务没有可中断的运行进程，请刷新后重试'),{status:409});
 }
 const resumeClaims=new Set();
 export async function resumeGeneration(id,{apiKey,manualSelection}={}){
- if(resumeClaims.has(id)||jobs.get(id)?.status==='running')throw Error('该任务仍在运行或已经开始恢复，请等待当前执行结束');
+ if(resumeClaims.has(id)||taskControlState(id)||['running','stopping'].includes(jobs.get(id)?.status))throw Error('该任务仍在运行或已经开始恢复，请等待当前执行结束');
  resumeClaims.add(id);
  try{
   let checkpoint=await loadWorkflowCheckpoint(id);if(!checkpoint)throw Error('该任务没有可恢复的制作断点，请使用现有大纲重新生成');

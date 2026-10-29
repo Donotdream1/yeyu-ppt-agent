@@ -1,4 +1,5 @@
 import {modelApiKey} from './model-connections.mjs';
+import {throwIfTaskStopped,isTaskStopped} from './task-control.mjs';
 import {randomUUID} from 'node:crypto';
 import {runHermes} from './hermes-client.mjs';
 import {runPageAgents} from './page-agent-pool.mjs';
@@ -25,7 +26,7 @@ export async function runNativeLayoutWorkflow(body,{onPhase=()=>{},onPlan=()=>{}
  let plan=restored?.plan||input.outlinePlan,stage='planning',phase='Hermes：分析文档与原生参考版式',metrics=[...(restored?.metrics||[])],errors=[],runs=[...(restored?.runs||[])],chain=Promise.resolve();
  const progress=()=>({stage,totalPages:plan?.slides?.length||count,completedPages:plan?.slides?.flatMap((s,i)=>s.adaptation?.status==='checked'?[i+1]:[])||[],activePages:[],failedPages:errors,concurrency:4,batchSize:1,modelRequests:metrics.reduce((n,m)=>n+(m.modelRequests||0),0),resumable:stage!=='done'});
  const persist=async(status='running',extra={})=>{const snapshot=structuredClone({id:checkpointId,body:input,plan,status,phase,progress:progress(),resumable:status==='failed',metrics,runs,...extra});chain=chain.then(()=>saveWorkflowCheckpoint(checkpointId,snapshot));await chain;onProgress(progress());};
- const agent=async args=>{const run={runId:args.id,role:args.role,pages:args.assignedPages,status:'running',startedAt:new Date().toISOString()};runs.push(run);await persist();try{const r=await runAgent({...args,apiKey:key,model:input.model,allowSkillTool:false,maxIterations:3,timeoutMs:300000,onMetrics:m=>metrics.push(m)});run.status='finished';return r;}catch(e){run.status='failed';throw e;}finally{run.finishedAt=new Date().toISOString();await persist();}};
+ const agent=async args=>{throwIfTaskStopped();const run={runId:args.id,role:args.role,pages:args.assignedPages,status:'running',startedAt:new Date().toISOString()};runs.push(run);await persist();try{const r=await runAgent({...args,apiKey:key,model:input.model,allowSkillTool:false,maxIterations:3,timeoutMs:300000,onMetrics:m=>metrics.push(m)});throwIfTaskStopped();run.status='finished';return r;}catch(e){run.status=isTaskStopped(e)?'stopped':'failed';throw e;}finally{run.finishedAt=new Date().toISOString();await persist();}};
  try{
   onPhase(phase);
   if(!plan){
@@ -55,7 +56,7 @@ export async function runNativeLayoutWorkflow(body,{onPhase=()=>{},onPlan=()=>{}
     slide.materialSnapshot.chartData=args.charts.map(d=>({...d,is_simulated:d.records.length>0&&(Boolean(d.isSimulated)||d.records.some(r=>/模拟|仅示意/.test(r.sourceQuote))||/所有数字仅用于验收|所有.*数值.*模拟/.test(input.document))}));slide.adaptation={status:'checked'};accepted=true;await persist();return {ok:true,pages:[{page,ok:true}]};},completeWhen:(name,r)=>name===writingTool.name&&r.ok});
    if(!accepted)throw Error(`第${page}页未提交完整原生槽位`);
   }
-  await runPageAgents(plan.slides.map((_,i)=>i+1),{concurrency:4,isComplete:n=>plan.slides[n-1].adaptation?.status==='checked',worker:async n=>{try{return await write(n);}catch(e){errors.push({page:n,error:e.message});await persist();throw e;}},onProgress:p=>onProgress({...progress(),activePages:p.activePages||[],workers:p.workers||[]})});
+  await runPageAgents(plan.slides.map((_,i)=>i+1),{concurrency:4,isComplete:n=>plan.slides[n-1].adaptation?.status==='checked',worker:async n=>{try{return await write(n);}catch(e){if(isTaskStopped(e))throw e;errors.push({page:n,error:e.message});await persist();throw e;}},onProgress:p=>onProgress({...progress(),activePages:p.activePages||[],workers:p.workers||[]})});
   const missing=plan.slides.flatMap((s,i)=>s.adaptation?.status==='checked'?[]:[i+1]);if(missing.length)throw Error('以下页面尚未完成：'+missing.join('、'));
   stage='publishing';phase='检查原生文字、关系与全页预览';onPhase(phase);await persist();
   const save=saveOutput||(await import('./studio.mjs')).saveComposition;let output;
@@ -63,5 +64,5 @@ export async function runNativeLayoutWorkflow(body,{onPhase=()=>{},onPlan=()=>{}
    try{output=await save(plan,{onPhase,requireNativeCheck:true});break;}catch(e){if(attempt===2||!e.issues?.length)throw e;const pages=[...new Set(e.issues.map(v=>v.page))];onPhase('依据PowerPoint实测边界精简文案：'+pages.join('、'));await runPageAgents(pages,{concurrency:4,worker:n=>write(n,e.issues.filter(v=>v.page===n))});}
   }
   stage='done';phase='原生PPT与全页预览已就绪';output={...output,execution:{mode:'native-reference',checkpointId,metrics}};await persist('done',{output});return output;
- }catch(e){stage='failed';phase=e.message;if(!errors.length)errors=[{page:0,error:e.message}];await persist('failed',{error:e.message});e.checkpointId=checkpointId;e.resumable=true;e.progress=progress();throw e;}
+ }catch(e){stage=isTaskStopped(e)?'stopped':'failed';phase=isTaskStopped(e)?'已停止，进度已保存':e.message;if(!isTaskStopped(e)&&!errors.length)errors=[{page:0,error:e.message}];await persist(stage,{error:isTaskStopped(e)?undefined:e.message,resumable:true});e.checkpointId=checkpointId;e.resumable=true;e.progress=progress();throw e;}
 }

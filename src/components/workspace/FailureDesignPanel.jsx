@@ -38,6 +38,7 @@ export default function FailureDesignPanel({ s, page, onPageChange }) {
    </button>)}</div>}
    {!loading&&data&&!data.items.length&&<p className="recovery-empty">{data.note}</p>}
    {choice&&<div className="recovery-choice"><strong>已选：{choice.sourceName} 第 {choice.sourcePage} 页</strong><p>{choice.recipe==='reflow'?'按用户模板安全重排，保留原生图形与原色。':'沿用素材构图，按本页内容重新撰写文字。'}</p>{choice.warnings?.map(w=><p key={w}>{w}</p>)}<Button variant="outline" size="sm" onClick={()=>setZoom(true)}><ZoomIn/>放大查看素材</Button></div>}
+   {!loading&&data&&!query.trim()&&!data.items.some(c=>c.selectable)&&<Button variant="outline" disabled={busy} onClick={()=>s.resumeJob()}><RefreshCw/>自动重组模板并继续</Button>}
    <Button className="recovery-continue" disabled={!choice?.selectable||loading||busy} onClick={()=>s.resumeJob({page:data.page.number,materialId:choice.id,recipe:choice.recipe,revision:data.revision})}>{busy?<Loader2 className="animate-spin"/>:<RefreshCw/>}使用此设计并继续</Button>
    <p className="recovery-help">素材图中的旧文字仅作版式预览，继续时会替换为你的内容。若再次检查未通过，可在这里重选设计。</p>
   </CardContent>

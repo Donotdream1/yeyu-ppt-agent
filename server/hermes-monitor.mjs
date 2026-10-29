@@ -117,6 +117,7 @@ export async function readHermesTask(id, { root = dataDir, liveTask } = {}) {
       },
     };
   }
+  if(liveTask)task={...task,status:liveTask.status,phase:liveTask.phase,resumable:liveTask.resumable??task.resumable};
   const metrics = (task.metrics || []).map((m) => ({
     runId: m.runId,
     role: m.role,

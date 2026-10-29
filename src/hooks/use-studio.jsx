@@ -292,6 +292,7 @@ export function useStudio() {
           );
           return;
         }
+        if (j.status === "stopped") {setBusy("");setError("");setJobId("");return;}
         if (j.status === "failed") {
           setBusy("");
           setError(j.recovery?.status==='ready'&&j.resumable?'':j.error || "任务未完成，可查看已保存的进度");
@@ -484,6 +485,11 @@ export function useStudio() {
       setBusy("");
       setError(e.message);
     }
+  }
+  async function stopJob() {
+    if (!jobSnapshot?.id || jobSnapshot.status==='stopping') return;
+    try {const result=await post('/api/jobs/'+jobSnapshot.id+'/stop',{});setJobSnapshot(old=>({...old,status:result.status,phase:result.status==='stopped'?'已停止，进度已保存':'正在停止，等待当前操作安全结束'}));}
+    catch(e){setToast(e.message);}
   }
   async function resumeJob(selection) {
     if (!jobSnapshot?.id || resuming) return;
@@ -812,6 +818,7 @@ export function useStudio() {
     importMaterials,
     generate,
     resumeJob,
+    stopJob,
     updateBlock,
     exportEdits,
     applyTemplate,

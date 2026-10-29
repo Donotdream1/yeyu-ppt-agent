@@ -169,7 +169,7 @@ export default function App() {
   }, [step]);
   useEffect(() => {
     const route=readWorkspaceLocation(window.location);let path=tabPath(s.tab);
-    if(s.tab==='create'){if(s.output?.id)path=presentationPath(s.output.publicId||s.output.id,s.page);else if(s.jobId||s.jobSnapshot?.status==='failed'&&step==='generate')path=jobPath(s.jobId||s.jobSnapshot.id);else if(route.outputId||route.publicId||route.jobId)return;}
+    if(s.tab==='create'){if(s.output?.id)path=presentationPath(s.output.publicId||s.output.id,s.page);else if(s.jobId||['failed','stopped'].includes(s.jobSnapshot?.status)&&step==='generate')path=jobPath(s.jobId||s.jobSnapshot.id);else if(route.outputId||route.publicId||route.jobId)return;}
     if(s.tab==='settings'&&settingsSection!=='account')path='/settings/'+settingsSection;
     window.history.replaceState(window.history.state,'',path);
   }, [s.tab,s.output?.id,s.page,s.jobId,s.jobSnapshot?.status,step,settingsSection]);
@@ -282,7 +282,7 @@ export default function App() {
   const producing = Boolean(
     s.jobId ||
     (s.busy && ["outline", "generate"].includes(step)) ||
-    (s.jobSnapshot?.status === "failed" &&
+    (["failed","stopped"].includes(s.jobSnapshot?.status) &&
       ["outline", "generate"].includes(step)),
   );
   return (

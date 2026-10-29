@@ -41,7 +41,7 @@ export function slotKey(node){
  return `shape:${first(node,'cNvPr')?.getAttribute('id')}`;
 }
 export async function analyzeMaterial(component,{legacy=false,cache=defaultAnalysisCache}={}){
- const key=createHash('sha256').update(JSON.stringify({component,legacy,analysisVersion:legacy?1:2,geometryVersion:2,sourceCaptionPolicy:7,slotPolicy:legacy?'legacy':'all-editable'})).digest('hex');
+ const key=createHash('sha256').update(JSON.stringify({component,legacy,analysisVersion:legacy?1:2,geometryVersion:2,sourceCaptionPolicy:8,slotPolicy:legacy?'legacy':'all-editable'})).digest('hex');
  const inspect=async()=>inspectMaterial(component,{legacy,zip:cache?await cache.source(component.sourceId):await openZip(await sourceBuffer(component.sourceId))});
  // Callers mutate plan snapshots during composition; a shared result must never leak.
  return structuredClone(await (cache?cache.snapshot(key,inspect):inspect()));

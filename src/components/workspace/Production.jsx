@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import FailureDesignPanel from './FailureDesignPanel';
 import CompletedPagePreview from './CompletedPagePreview';
 import {
+  Square,
   Loader2,
   CheckCircle2,
   AlertCircle,
@@ -43,6 +44,9 @@ export default function Production({ s, planning = false }) {
   const job = s.jobSnapshot,
     p = job?.progress || {},
     failed = job?.status === "failed",
+    stopped = job?.status === "stopped",
+    stopping = job?.status === "stopping",
+    settled = failed || stopped,
     done = p.completedPages || [],
     total = p.totalPages || s.liveOutline?.slides?.length || 0,
     issues = job?.recovery?.status==='ready'?[]:p.failedPages || [];
@@ -50,30 +54,31 @@ export default function Production({ s, planning = false }) {
   return (
     <div className={failed?'production-with-recovery':'production-layout'}>
     <Card className="production-card">
-      <CardHeader>
-        <div className={`production-symbol ${failed ? "failed" : ""}`}>
-          {failed ? (
+      <CardHeader className="relative">
+        {['running','queued','stopping'].includes(job?.status)&&<Button variant="outline" size="sm" className="absolute right-6 top-6" disabled={stopping} onClick={s.stopJob}><Square size={14}/>{stopping?'正在停止':'停止生成'}</Button>}
+        <div className={`production-symbol ${settled ? "failed" : ""}`}>
+          {settled ? (
             <AlertCircle size={28} />
           ) : (
             <Loader2 size={28} className="animate-spin" />
           )}
         </div>
         <CardTitle>
-          {failed
+          {stopped ? "已停止，进度已保存" : stopping ? "正在停止任务" : failed
             ? "进度已保存，可以继续"
             : planning
               ? "正在规划逐页方案"
               : "正在把方案制作成PPT"}
         </CardTitle>
         <CardDescription>
-          {failed
+          {stopping ? "等待当前操作安全结束，已完成内容会保留。" : settled
             ? "已完成的页面会保留，继续时仅处理剩余或未通过的页面。"
             : "可以在这里查看真实进度。文案、图形和素材将逐页适配。"}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="production-status">
-          <span>{stageNames[p.stage] || "正在准备任务"}</span>
+          <span>{stopping?job.phase:stageNames[p.stage] || "正在准备任务"}</span>
           <strong>
             {total ? `${done.length} / ${total} 页完成` : "正在组织内容"}
           </strong>
@@ -119,14 +124,14 @@ export default function Production({ s, planning = false }) {
             ))}
           </div>
         )}
-        {failed && (
+        {settled && (
           <div className="production-recovery">
             {job.recovery?.status==='ready'&&<strong>Hermes 启动环境已恢复</strong>}
-            <p>{job.recovery?.message || job.error || s.error}</p>
+            <p>{stopped?'停止操作已完成，可从断点继续。':job.recovery?.message || job.error || s.error}</p>
             {job.recovery?.originalError&&<details><summary>查看此前错误</summary><p>{job.recovery.originalError}</p></details>}
-            <Button onClick={s.resumeJob} disabled={s.resuming || !!s.busy}>
+            <Button onClick={stopped&&job.kind==='replace'?()=>s.setJobSnapshot(null):s.resumeJob} disabled={s.resuming || !!s.busy}>
               <RefreshCw className={s.resuming ? "animate-spin" : ""} />
-              {job.recovery?.status==='ready'?'继续生成':'继续完成剩余页面'}
+              {stopped&&job.kind==='replace'?'返回原稿':job.recovery?.status==='ready'?'继续生成':'继续完成剩余页面'}
             </Button>
           </div>
         )}

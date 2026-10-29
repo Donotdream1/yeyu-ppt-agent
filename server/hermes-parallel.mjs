@@ -1,7 +1,9 @@
+import {generatePageTemplate} from './page-template-fallback.mjs';
 import {modelApiKey} from './model-connections.mjs';
 import {navigationPolicy} from './navigation-sections.mjs';
 import {createPresentationContract} from './presentation-contract.mjs';
 import fs from 'node:fs/promises';
+import {throwIfTaskStopped,isTaskStopped} from './task-control.mjs';
 import path from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 import {createHermesSession,HERMES_TOOLS} from './hermes-workflow.mjs';
@@ -73,9 +75,9 @@ export async function runParallelHermesWorkflow(body,{onPhase=()=>{},onPlan=()=>
  };
  const change=async(next,label)=>{enterStage(next);phase=label;onPhase(label);await persist();};
  const met=m=>metrics.push(m);
- const executeAgent=async args=>{
+ const executeAgent=async args=>{throwIfTaskStopped();
   const run={runId:args.id,role:args.role,pages:args.assignedPages,status:'running',startedAt:new Date().toISOString()};runs.push(run);await persist();
-  try{return await runAgent(args);}catch(error){run.status='failed';throw error;}
+  try{const result=await runAgent(args);throwIfTaskStopped();return result;}catch(error){run.status=isTaskStopped(error)?'stopped':'failed';throw error;}
   finally{if(run.status==='running')run.status='finished';run.finishedAt=new Date().toISOString();await persist();}
  };
  try{
@@ -106,6 +108,10 @@ export async function runParallelHermesWorkflow(body,{onPhase=()=>{},onPlan=()=>
   if(charts.length){await roleSkills(session,['chart-drawing']);for(const n of charts){const pendingCopy=restored?.plan?.slides[n-1]?.chart||session.plan.slides[n-1].chart;await session.handle('ppt_prepare_charts',{pages:[{page:n,chart:session.plan.slides[n-1].chart}]});Object.assign(session.plan.slides[n-1].chart,{preparedByWorkflow:true,copyNeedsRepair:Boolean(pendingCopy.copyNeedsRepair),copyIssues:pendingCopy.copyIssues});}}
   await change('materials','素材协调器：检查原生对象、原字号容量与候选构图');
   const visualWork=[],reservations=new Set(used);
+  const fallbackTemplate=async(slide,excludeIds=[])=>{
+   const generated=await generatePageTemplate(slide,{components:session.catalog.items,template:session.template,sourceId:session.input.paletteSourceId||session.plan.palette?.sourceId,runAgent:executeAgent,apiKey:key,model:session.input.model,onPhase,onMetrics:met,excludeIds});
+   session.catalog.items.push(generated.component);return generated;
+  };
   if(!research){
    for(const [i,s] of session.plan.slides.entries()){
     const n=i+1;if(session.isNativeCover(n)||s.chart)continue;
@@ -119,9 +125,9 @@ export async function runParallelHermesWorkflow(body,{onPhase=()=>{},onPlan=()=>
     }
     try{
      const candidates=await prepareVisualCandidates(s,session.catalog.items,{template:session.template,preferredSourceId:session.input.paletteSourceId||session.plan.palette?.sourceId,referenceId:session.plan.referenceId,used:reservations,limit:4});
-     if(!candidates.length)throw Error('没有通过主体占比与结构检查的素材，请选择适合该页的设计');
+     if(!candidates.length)candidates.push(await fallbackTemplate(s));
      visualWork.push({page:n,slide:s,candidates});for(const candidate of candidates){reservations.add(candidate.component.id);reservations.add(materialIdentity(candidate.component));}
-    }catch(e){failures.set(n,e.message);}
+    }catch(e){if(isTaskStopped(e))throw e;failures.set(n,e.message);}
     await persist();
    }
   }
@@ -153,7 +159,7 @@ export async function runParallelHermesWorkflow(body,{onPhase=()=>{},onPlan=()=>
      const context=pending.map(n=>writerPageContext(session,n,lastErrors));
      await executeAgent({id:randomUUID(),apiKey:key,model:session.input.model,role,assignedPages:[page],allowSkillTool:false,maxIterations:4,maxTokens:12000,timeoutMs:300000,systemPrompt:rules+'\n本实例只负责一页。只提交分配页码的内容，不能修改其他页、选择其他页的素材或发布整稿。完成由总控汇总。\n'+(research?RESEARCH_WRITER_CONTRACT:WRITER_CONTRACT)+'\n'+writingSkills,message:JSON.stringify({pages:context,evidence:evidenceForPages(pending.map(n=>session.plan.slides[n-1])),requirements:session.input.requirements,designProfile:session.plan.designProfile,designLock:session.plan.designLock}),tools:pageScopedTools(toolsFor([research?'ppt_research_pages':'ppt_commit_pages']),page),onTool:async(name,args)=>{
       if(![research?'ppt_research_pages':'ppt_commit_pages'].includes(name)||!Array.isArray(args.pages)||args.pages.length!==1||args.pages.some(p=>!allowed.has(Number(p.page))))throw Error('写作智能体只能提交其分配的一页');
-      let response;try{response=await session.handle(name,args);}catch(e){response={ok:false,errors:args.pages.map(p=>({page:Number(p.page),issues:[e.message]}))};}
+      let response;try{response=await session.handle(name,args);}catch(e){if(isTaskStopped(e))throw e;response={ok:false,errors:args.pages.map(p=>({page:Number(p.page),issues:[e.message]}))};}
       lastErrors=response.errors||[];const sig=JSON.stringify(lastErrors);if(lastErrors.length){signatures.set(sig,(signatures.get(sig)||0)+1);if(signatures.get(sig)>=2){response.stopRepeatedFailure=true;repeatedFailure=true;}}
       for(const n of pending){if(pageIsComplete(session,n)){failures.delete(n);pageErrors.delete(n);}else {const error=lastErrors.find(e=>+e.page===n);if(error)pageErrors.set(n,error);}}
       await persist();return response;
@@ -182,7 +188,7 @@ export async function runParallelHermesWorkflow(body,{onPhase=()=>{},onPlan=()=>
   if(!research&&stuck.length){
    await change('materials','局部改选：仅为未通过页面寻找更适合容量的素材，保留已完成页面');
    const retryWork=[],occupied=new Set(session.plan.slides.flatMap(s=>[s.materialId,s.materialSnapshot?.familyId]).filter(Boolean));
-   for(const n of stuck.filter(n=>!session.plan.slides[n-1].manualDesign)){const slide=session.plan.slides[n-1],old=slide.materialSnapshot,excludeIds=session.catalog.items.filter(c=>c.id===slide.materialId||old&&c.sourceId===old.sourceId&&c.page===old.page).map(c=>c.id);const candidates=await prepareVisualCandidates(slide,session.catalog.items,{template:session.template,preferredSourceId:session.input.paletteSourceId||session.plan.palette?.sourceId,referenceId:session.plan.referenceId,used:occupied,excludeIds,limit:3});if(candidates.length)retryWork.push({page:n,slide,candidates});}
+   for(const n of stuck.filter(n=>!session.plan.slides[n-1].manualDesign)){const slide=session.plan.slides[n-1],old=slide.materialSnapshot,excludeIds=session.catalog.items.filter(c=>c.id===slide.materialId||old&&c.sourceId===old.sourceId&&c.page===old.page).map(c=>c.id);const candidates=await prepareVisualCandidates(slide,session.catalog.items,{template:session.template,preferredSourceId:session.input.paletteSourceId||session.plan.palette?.sourceId,referenceId:session.plan.referenceId,used:occupied,excludeIds,limit:3});if(!candidates.length)candidates.push(await fallbackTemplate(slide,excludeIds));if(candidates.length)retryWork.push({page:n,slide,candidates});}
    if(retryWork.length){await change('visual-selection','视觉复选：只比较未通过页面的新素材');const retried=await selectVisualPages(retryWork,{apiKey:key,model:session.input.model,checkpointId,requirements:session.input.requirements+'\n上一版文字容量不适配；优先充足正文区，短标签不重复整句或完整日期。',onPhase,onMetrics:met,runAgent:executeAgent,concurrency:options.concurrency,batchSize:options.visualBatchSize,onSelection:async(n,choice)=>{await acceptVisualSelection(n,choice);pageErrors.delete(n);}});await writePages([...retried.choices.keys()]);}
   }
   if(research&&!session.plan.slides.some(s=>s.researchAssets?.length||s.chart?.status==='ready')){
@@ -202,7 +208,7 @@ export async function runParallelHermesWorkflow(body,{onPhase=()=>{},onPlan=()=>
     if(session.plan.slides[row.page-1].manualDesign){failures.set(row.page,'用户选择的素材与本页内容结构不符，请在右侧重新选择设计');throw Error('第 '+row.page+' 页需人工重选设计：'+row.reason);}
     const slide=session.plan.slides[row.page-1];if(row.recommendedModuleCount)slide.materialRequest={...slide.materialRequest,moduleCount:row.recommendedModuleCount,moduleCountExplicit:true};
     const candidates=await prepareVisualCandidates(slide,session.catalog.items,{template:session.template,preferredSourceId:session.input.paletteSourceId||session.plan.palette?.sourceId,referenceId:session.plan.referenceId,used:reserved,limit:3});
-    if(!candidates.length)throw Error('第 '+row.page+' 页内容与素材结构不匹配，尚未找到合适的新素材，已保存进度');
+    if(!candidates.length)candidates.push(await fallbackTemplate(slide));
     replacements.push({page:row.page,slide,candidates});for(const c of candidates){reserved.add(c.component.id);reserved.add(materialIdentity(c.component));}
    }
    if(replacements.length)await selectVisualPages(replacements,{apiKey:key,model:session.input.model,checkpointId,requirements:session.input.requirements+'\\n内容关联审校：选择真实主题与模块数一致的设计，不通过重复要点填槽。',designLock:session.plan.designLock,onPhase,onMetrics:met,runAgent:executeAgent,concurrency:options.concurrency,batchSize:options.visualBatchSize,onSelection:async(n,choice)=>{await acceptVisualSelection(n,choice);pageErrors.delete(n);}});
@@ -227,11 +233,29 @@ export async function runParallelHermesWorkflow(body,{onPhase=()=>{},onPlan=()=>
    const semantic=await session.reviewRelevance({runAgent:executeAgent,onMetrics:met});if(!semantic.passed)throw Error('文字精简后的主题关联审校未通过，具体问题已保留');
    review=await session.handle('ppt_review_layout');if(!review.ok)throw Error(review.issues.join('；'));
    const check=await session.handle('ppt_harness_review');if(!check.passed)throw Error('局部修复后的整稿审校未通过');
-   await change('export','局部修复完成，重新执行统一导出与文字检查');await session.handle('ppt_publish');
+   await change('export','局部修复完成，重新执行统一导出与文字检查');
+   try{await session.handle('ppt_publish');}catch(overflow){
+    if(isTaskStopped(overflow)||!overflow.issues?.length)throw overflow;
+    const pages=[...new Set(overflow.issues.map(i=>Number(i.page)).filter(n=>n>0&&n<=session.plan.slides.length))],replacements=[];
+    for(const n of pages){const slide=session.plan.slides[n-1];if(slide.chart||research||session.isNativeCover(n)||['cover','ending'].includes(slide.kind))throw overflow;
+     const old=slide.materialSnapshot,excludeIds=session.catalog.items.filter(c=>c.id===slide.materialId||old&&c.sourceId===old.sourceId&&c.page===old.page).map(c=>c.id),used=new Set(session.plan.slides.flatMap((s,i)=>i===n-1?[]:[s.materialId,materialIdentity(s.materialSnapshot)]).filter(Boolean));
+     const candidates=await prepareVisualCandidates(slide,session.catalog.items,{template:session.template,preferredSourceId:session.input.paletteSourceId||session.plan.palette?.sourceId,referenceId:session.plan.referenceId,used,excludeIds,limit:3});
+     if(!candidates.length)candidates.push(await fallbackTemplate(slide,excludeIds));replacements.push({page:n,slide,candidates});
+    }
+    await change('materials','原字号仍溢出：换用适配版式，无候选时生成本页模板');
+    // The current request explicitly authorizes the fallback after copy repair.
+    for(const row of replacements)delete session.plan.slides[row.page-1].manualDesign;
+    await selectVisualPages(replacements,{apiKey:key,model:session.input.model,checkpointId,requirements:session.input.requirements+'\\n原字号溢出，请选择正文区域充足的版式。',designLock:session.plan.designLock,onPhase,onMetrics:met,runAgent:executeAgent,concurrency:options.concurrency,batchSize:options.visualBatchSize,onSelection:async(n,choice)=>{await acceptVisualSelection(n,choice);pageErrors.delete(n);failures.delete(n);}});
+    await writePages(pages);if(unfinished().length)throw overflow;
+    const semantic=await session.reviewRelevance({runAgent:executeAgent,onMetrics:met});if(!semantic.passed)throw Error('换版后内容关联检查未通过，已保存进度');
+    const layout=await session.handle('ppt_review_layout');if(!layout.ok)throw Error(layout.issues.join('；'));
+    const check=await session.handle('ppt_harness_review');if(!check.passed)throw Error('换版后整稿检查未通过');
+    await persist();await change('export','本页换版已完成，重新检查并导出');await session.handle('ppt_publish');
+   }
   }
   await recordMaterialUses(session.output);
   enterStage('done');phase='可编辑PPT与全页预览已完成';const finalTiming=timing(),output={...session.output,execution:{mode:'parallel',...options,checkpointId,metrics,elapsedMs:finalTiming.totalActiveMs,runElapsedMs:Date.now()-started,summary:executionSummary(metrics,finalTiming)}};
   await atomicUpdateJson(path.join(dataDir,'outputs',output.id+'.json'),{},record=>{record.execution=output.execution;});
   await persist('done',{output});return output;
- }catch(e){await persist('failed',{error:e.message}).catch(()=>{});e.checkpointId=checkpointId;e.resumable=true;e.progress=progress();throw e;}
+ }catch(e){await persist(isTaskStopped(e)?'stopped':'failed',{error:isTaskStopped(e)?undefined:e.message,resumable:true,...(isTaskStopped(e)?{phase:'已停止，进度已保存'}:{})}).catch(()=>{});e.checkpointId=checkpointId;e.resumable=true;e.progress=progress();throw e;}
 }

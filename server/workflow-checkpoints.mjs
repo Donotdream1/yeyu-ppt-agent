@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {atomicUpdateJson} from './atomic-json.mjs';
 import {dataDir} from './library.mjs';
+import {throwIfTaskStopped,isTaskStopped} from './task-control.mjs';
 
 const queues=new Map();
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -79,7 +80,7 @@ export async function mapPageBatches(pages,{concurrency=3,batchSize=2,batches:pr
  if(preparedBatches){const flat=batches.flat();if(batches.some(b=>!b.length)||flat.length!==pages.length||flat.some((n,i)=>n!==pages[i]))throw Error('预分组必须按顺序完整覆盖页面，不能遗漏或重复');}
  else for(let i=0;i<pages.length;i+=batchSize)batches.push(pages.slice(i,i+batchSize));
  const results=[],failures=[],workers=Array.from({length:Math.min(concurrency,batches.length)},(_,i)=>({id:'writer-'+(i+1),workerId:i+1,status:'idle',pages:[],attempt:1}));
- let next=0,successfulPages=0,failedPages=0,progressQueue=Promise.resolve(),progressError;
+ let next=0,successfulPages=0,failedPages=0,progressQueue=Promise.resolve(),progressError,stoppedError;
  const pageId=value=>value&&typeof value==='object'?(value.page??value.id):value;
  function notify(){
   const progress={totalPages:pages.length,completedPages:successfulPages+failedPages,successfulPages,failedPages,processedPages:successfulPages+failedPages,totalBatches:batches.length,completedBatches:results.length,failedBatches:failures.length,concurrency,batchSize,activePages:workers.flatMap(w=>w.pages),workers:workers.map(w=>({...w,pages:[...w.pages]}))};
@@ -89,14 +90,16 @@ export async function mapPageBatches(pages,{concurrency=3,batchSize=2,batches:pr
  await notify();
  await Promise.all(workers.map(async state=>{
   while(next<batches.length){
+   if(stoppedError)break;try{throwIfTaskStopped();}catch{break;}
    const batchIndex=next++,batch=batches[batchIndex];state.status='working';state.pages=batch.map(pageId);state.batchIndex=batchIndex;
    await notify();
    try{const value=await worker(batch,{workerId:state.workerId,attempt:1});results.push({batchIndex,pages:batch.map(pageId),workerId:state.workerId,value});successfulPages+=batch.length;}
-   catch(error){failures.push({batchIndex,pages:batch.map(pageId),workerId:state.workerId,error:safeFailure(error),...(error?.issues?{issues:error.issues}:{})});failedPages+=batch.length;}
+   catch(error){if(isTaskStopped(error))stoppedError=error;else{failures.push({batchIndex,pages:batch.map(pageId),workerId:state.workerId,error:safeFailure(error),...(error?.issues?{issues:error.issues}:{})});failedPages+=batch.length;}}
    finally{state.status='idle';state.pages=[];delete state.batchIndex;await notify();}
   }
  }));
  await progressQueue;
+ throwIfTaskStopped();if(stoppedError)throw stoppedError;
  if(progressError)throw progressError;
  return {results:results.sort((a,b)=>a.batchIndex-b.batchIndex),failures:failures.sort((a,b)=>a.batchIndex-b.batchIndex)};
 }

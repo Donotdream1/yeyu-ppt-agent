@@ -11,6 +11,15 @@ import {composeDeck} from '../server/composition.mjs';
 import {NS,openZip,slideOrder,parse,elements,first} from '../server/ooxml.mjs';
 
 const position={x:.807,y:.048,w:.184,h:.081};
+test('matching report heading at the top left is furniture, while real module headings remain',()=>{
+ const slot={key:'shape:13',sample:'述职报告：工作中的个人成长',font:28,position:{x:.029,y:.036,w:.391,h:.076}},component={layout:true,scope:'full',title:'完整组合 · 工作中的个人成长'};
+ assert.equal(isSourceAuxiliaryCaption(slot,component),true);
+ assert.equal(isSourceAuxiliaryCaption({...slot,sample:'后续方向'},component),false);
+ assert.equal(isSourceAuxiliaryCaption({...slot,position:{...slot.position,y:.3}},component),false);
+ assert.equal(isSourceAuxiliaryCaption(slot,{...component,title:'三项工作举措'}),false);
+ assert.equal(isSourceAuxiliaryCaption(slot,{...component,layout:false}),false);
+ assert.equal(isSourceAuxiliaryCaption({...slot,table:{row:0,column:0}},component),false);
+});
 test('仅清已确认的源辅助页眉，正常右栏标题、表格、小图标文字和非白名单参考页不误清',()=>{
  assert.equal(isSourceAuxiliaryCaption({sample:'高端工作汇报PPTHigh end Work Report PPT',position},{}),true);
  assert.equal(isSourceAuxiliaryCaption({sample:'Powerpoint Template',position},{}),true);
