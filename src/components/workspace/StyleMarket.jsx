@@ -6,6 +6,7 @@ import {Input} from '@/components/ui/input';
 import {SelectField} from '@/components/ui/select-field';
 import {Textarea} from '@/components/ui/textarea';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '@/components/ui/dialog';
+import AITemplateBuilder from './AITemplateBuilder';
 export default function StyleMarket({s,compact=false}){
  const [items,setItems]=useState([]),[query,setQuery]=useState(''),[detail,setDetail]=useState(null),[content,setContent]=useState(''),[name,setName]=useState(''),[font,setFont]=useState(''),[count,setCount]=useState(0),[templateUsage,setTemplateUsage]=useState('layout'),[busy,setBusy]=useState(false),[error,setError]=useState(''),[selected,setSelected]=useState([]),[creating,setCreating]=useState(false),[base,setBase]=useState(null),[reference,setReference]=useState(null);
  const file=useRef(),replaceFile=useRef(),promptFile=useRef();
@@ -22,7 +23,7 @@ export default function StyleMarket({s,compact=false}){
  function download(){const url=URL.createObjectURL(new Blob([content+(detail?.modelAnalysis?.prompt||'')],{type:'text/markdown;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='SKILL.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
  const visible=items.filter(item=>(item.name+' '+item.family+' '+item.description).includes(query));
  return <section className={'style-market'+(compact?' compact':'')}>
-  <div className="section-toolbar"><div><h2>版式与 Skills</h2></div><div className="dialog-actions"><Button disabled={busy} variant="outline" onClick={()=>file.current.click()}><Upload size={16}/>上传 / 解析风格</Button><Button onClick={()=>create()}><Plus size={16}/>新建版式</Button></div><input ref={file} type="file" accept=".md,.zip,.pptx,.docx,.pdf,.txt" hidden onChange={e=>void upload(e.target.files[0])}/></div>
+  <div className="section-toolbar"><div><h2>版式与 Skills</h2></div><div className="dialog-actions"><AITemplateBuilder s={s} onSaved={async card=>{await load();open(card);}}/><Button disabled={busy} variant="outline" onClick={()=>file.current.click()}><Upload size={16}/>上传 / 解析风格</Button><Button onClick={()=>create()}><Plus size={16}/>新建版式</Button></div><input ref={file} type="file" accept=".md,.zip,.pptx,.docx,.pdf,.txt" hidden onChange={e=>void upload(e.target.files[0])}/></div>
   <div className="market-search"><Search size={16}/><Input aria-label="搜索版式Skills" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索风格、用途或技能"/></div>
   {error&&!detail&&!creating&&<div className="notice warning" role="alert">{error}</div>}
   {!!selected.length&&<div className="selection-actionbar"><span>已选 {selected.length} 项</span><Button variant="outline" disabled={busy} onClick={async()=>{setBusy(true);try{await post('/api/style-skills/batch-delete',{ids:selected});setSelected([]);await load();}catch(e){setError(e.message);}finally{setBusy(false);}}}><Trash2 size={15}/>删除所选</Button></div>}

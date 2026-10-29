@@ -40,6 +40,7 @@ server/bootstrap-v2.mjs
 !/scripts/test-fixtures.mjs
 !/scripts/verify-model-quota-http.mjs
 !/scripts/verify-collaboration-http.mjs
+!/scripts/verify-template-office.mjs
 !/scripts/test-trash-ui.mjs
 /docs/*
 !/docs/installation.md

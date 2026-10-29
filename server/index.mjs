@@ -1,8 +1,8 @@
+import 'dotenv/config';
 import {RESEARCH_PROFILE} from './research-profile.mjs';
 import {extractMaterialPalette} from './material-palette.mjs';
 import {hermesRuntimeStatus} from './hermes-client.mjs';
 import {analyzeMaterial,materialSummary,pinOutputPlan} from './material-analysis.mjs';
-import 'dotenv/config';
 import {installModelConnections,currentModelConnection} from './model-connections.mjs';
 import {installGenerationQuota} from './generation-quota.mjs';
 import {installWorkspaceRoutes} from './workspace-routes.mjs';
@@ -38,6 +38,7 @@ import {allowedLocalOrigin,networkInfo} from './network.mjs';
 import {installLocalAuth,localAuth} from './local-auth.mjs';
 import {installCollaborationRoutes} from './collaboration-routes.mjs';
 import {installSlidesConnectors} from './slides-connectors.mjs';
+import {installTemplateGenerationRoutes} from './template-generation-routes.mjs';
 import {PAGE_PURPOSES,PAGE_LOGICS,materialTagsCsv} from './material-tags.mjs';
 import {searchMaterialPages,startMaterialTagging,taggingJobs} from './material-tagging.mjs';
 import {readMaterialTags,reviewMaterialTags} from './material-tag-store.mjs';
@@ -53,6 +54,7 @@ installCollaborationRoutes(app,localAuth);
 installSlidesConnectors(app,localAuth);
 installModelConnections(app,localAuth);
 installGenerationQuota(app,localAuth);
+installTemplateGenerationRoutes(app,localAuth);
 app.get('/api/workspace/folders',async(req,res)=>res.json({items:await workspaceLibrary.folders(req.user.id)}));
 app.post('/api/workspace/folders',async(req,res)=>res.status(201).json(await workspaceLibrary.createFolder(req.user.id,req.body.name,{disk:true,account:req.user,parentPath:req.body.parentPath})));
 app.patch('/api/workspace/folders/:id',async(req,res)=>{await workspaceLibrary.renameFolder(req.user.id,req.params.id,req.body.name);res.json({ok:true});});
@@ -74,7 +76,7 @@ app.get('/api/page-assets/:id',async(req,res)=>{const asset=await readPageAsset(
 async function addReference(buffer,name){const out=await importPptx(buffer,name);await update(db=>{db.sources.find(s=>s.id===out.id).role='reference';db.activeReferenceId=out.id;});await indexComponents(out.id);out.layouts=await indexMaterialLayouts(out.id,{reference:true,force:true});void renderSource(out.id);return out;}
 app.post('/api/references',upload.single('file'),async(req,res)=>{if(!req.file||!/\.pptx$/i.test(req.file.originalname))throw new Error('请选择效果参考 PPTX');res.json(await addReference(req.file.buffer,Buffer.from(req.file.originalname,'latin1').toString('utf8')));});
 app.post('/api/references/path',async(req,res)=>{const file=req.body.path;if(typeof file!=='string'||!/\.pptx$/i.test(file))throw new Error('请提供效果参考 PPTX 路径');res.json(await addReference(await fs.readFile(file),path.basename(file)));});
-const projectSkills=[['page-edit','逐页编辑技能'],['ppt-writing','PPT 撰写技能'],['chart-drawing','图表绘制技能'],['material-use','素材使用技能'],['layout-review','排版检查技能'],['harness-review','Harness 审查技能'],['presentation-style','文档风格识别技能']];
+const projectSkills=[['template-design','可复用模板设计技能'],['page-edit','逐页编辑技能'],['ppt-writing','PPT 撰写技能'],['chart-drawing','图表绘制技能'],['material-use','素材使用技能'],['layout-review','排版检查技能'],['harness-review','Harness 审查技能'],['presentation-style','文档风格识别技能']];
 app.get('/api/design-options',async(req,res)=>{const db=await readLibrary();res.json({profiles:[{id:'auto',name:'按文档自动判断'},{id:'research-defense',name:'科研答辩 · 参考骨架'},{id:'material',name:'素材原生布局'}],research:RESEARCH_PROFILE,sources:db.sources.filter(s=>s.role!=='template').map(s=>({id:s.id,name:s.name})),defaultSourceId:db.sources.find(s=>s.name.includes('商务蓝橙'))?.id||db.sources.find(s=>s.role!=='template')?.id});});
 app.get('/api/design-palette/:id',async(req,res)=>res.json(await extractMaterialPalette(req.params.id)));
 app.get('/api/skills',async(req,res)=>res.json({runtime:await hermesRuntimeStatus(),items:await Promise.all(projectSkills.map(async([name,title])=>({name,title,content:await fs.readFile(path.resolve('agents/skills',name,'SKILL.md'),'utf8')})))}));

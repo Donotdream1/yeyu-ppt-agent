@@ -9,7 +9,7 @@ export const HERMES_SOURCE=path.resolve(process.env.HERMES_SOURCE_PATH||path.joi
 export const HERMES_PYTHON=process.env.HERMES_PYTHON||path.join(dataDir,'hermes-runtime','Scripts','python.exe');
 export async function hermesRuntimeStatus(){
  const checks=await Promise.all([fs.access(HERMES_PYTHON).then(()=>true,()=>false),fs.access(path.join(HERMES_SOURCE,'run_agent.py')).then(()=>true,()=>false)]);
- return {available:checks.every(Boolean),engine:'Hermes AIAgent',model:currentModelConnection()?.model||'DeepSeek',skills:['page-edit','ppt-writing','chart-drawing','material-use','layout-review','harness-review','presentation-style','research-defense-layout']};
+ return {available:checks.every(Boolean),engine:'Hermes AIAgent',model:currentModelConnection()?.model||'DeepSeek',skills:['template-design','page-edit','ppt-writing','chart-drawing','material-use','layout-review','harness-review','presentation-style','research-defense-layout']};
 }
 export function summarizeHermesLog(log){
  const lines=String(log).split('\n').filter(s=>/API call #\d+/.test(s)),number=(s,key)=>Number(s.match(new RegExp('(?:^|[ ,])'+key+'=(\\d+)'))?.[1]||0);

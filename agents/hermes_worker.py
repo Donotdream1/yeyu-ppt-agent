@@ -158,7 +158,7 @@ def main():
                 rpc('skill_loaded', {'name': args['name'], 'file_path': args.get('file_path')})
             return content
         if request.get('allowSkillTool', True):
-            registry.register(name='ppt_skill_view', toolset='ppt_workflow', schema={'name':'ppt_skill_view','description':'Load the full project skill or its linked references before that stage. Available: ppt-writing, chart-drawing, material-use, layout-review, harness-review, presentation-style.','parameters':{'type':'object','properties':{'name':{'type':'string'},'file_path':{'type':'string'}},'required':['name']}}, handler=view_skill)
+            registry.register(name='ppt_skill_view', toolset='ppt_workflow', schema={'name':'ppt_skill_view','description':'Load the full project skill or its linked references before that stage. Available: ppt-writing, chart-drawing, material-use, layout-review, harness-review, presentation-style, template-design.','parameters':{'type':'object','properties':{'name':{'type':'string'},'file_path':{'type':'string'}},'required':['name']}}, handler=view_skill)
         for schema in request['tools']:
             def handler(args, _name=schema['name'], **kwargs):
                 return rpc(_name, args)

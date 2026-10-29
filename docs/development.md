@@ -42,6 +42,13 @@ development decks are intentionally absent from public source.
 
 ## Releases
 
+On Windows with PowerPoint installed, `node scripts/verify-template-office.mjs`
+uses a synthetic material suite and a simulated model to exercise the real
+template composition, original-size text measurement and four-page PNG export.
+It calls no paid model and checks no personal deck. Imported full-page masters
+must be registered in the resulting presentation; ZIP/XML readability alone
+does not prove that PowerPoint can open a file.
+
 After a production frontend build, `node scripts/verify-collaboration-http.mjs`
 creates isolated synthetic accounts, starts a temporary server and uses two
 Playwright browser sessions to check membership, viewer source privacy,

@@ -20,6 +20,7 @@ import {sourceBuffer} from './library.mjs';
 import {direct,drawingNodes,textNodes,componentNodes} from './components.mjs';
 import {bindReferencePageCharts} from './reference-charts.mjs';
 import {bindNativeChart} from './native-charts.mjs';
+import {registerPresentationMasters} from './presentation-masters.mjs';
 import {editableTextTargets,rankMaterialLayouts,fallbackBindings} from './material-layouts.mjs';
 import {readSourceTheme,freezeSourceTheme,readSourceTypography,freezeSourceFontSizes,scaleNativeTables} from './source-theme.mjs';
 
@@ -226,6 +227,7 @@ if(!fullEnding&&plan.designProfile!=='research-defense'&&(plan.pageChrome||templ
     const rid='rId'+(Math.max(0,...elements(prels,'Relationship').map(n=>Number(n.getAttribute('Id').replace(/^rId/,''))||0))+1),r=prels.createElementNS(relNS,'Relationship');r.setAttribute('Id',rid);r.setAttribute('Type',NS.r+'/slide');r.setAttribute('Target','slides/composed-'+(page+1)+'.xml');prels.documentElement.appendChild(r);const id=pdoc.createElementNS(NS.p,'p:sldId');id.setAttribute('id',String(256+page));id.setAttributeNS(NS.r,'r:id',rid);slideList.appendChild(id);
   }
   if(plan.designProfile==='research-defense'){const size=first(pdoc,'sldSz');size.setAttribute('cx',String(template.width));size.setAttribute('cy',String(template.height));}
+  await registerPresentationMasters(zip,pdoc,prels,typesDoc);
   zip.file('ppt/presentation.xml',serialize(pdoc));zip.file('ppt/_rels/presentation.xml.rels',serialize(prels));zip.file('[Content_Types].xml',serialize(typesDoc));
   const skillFont=plan.styleSkillSnapshot?.fontFamily;await normalizeDeckFonts(zip,skillFont?{title:skillFont,body:skillFont,latin:skillFont}:plan.styleSkillSnapshot?.fontPolicy);
   return {buffer:await zip.generateAsync({type:'nodebuffer',compression:'DEFLATE'}),warnings,audit,charts,chromeChanges};
