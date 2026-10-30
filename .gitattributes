@@ -10,3 +10,6 @@
 *.cmd text eol=crlf
 *.pptx binary
 *.png binary
+
+# Preserve the pinned upstream Markdown snapshot, including its empty list items.
+agents/vendor/office-skills/meeting/SKILL.md whitespace=-blank-at-eol

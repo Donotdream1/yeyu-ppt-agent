@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import {currentModelConnection} from './model-connections.mjs';
+import {officeSkillCatalog} from './office-skills.mjs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import readline from 'node:readline';
@@ -11,7 +12,7 @@ export const HERMES_SOURCE=hermesRuntimePaths().sourcePath;
 export const HERMES_PYTHON=hermesRuntimePaths().pythonPath;
 export async function hermesRuntimeStatus(){
  const runtime=await inspectHermesRuntime();
- return {available:runtime.available,diagnostics:{pythonExists:runtime.pythonExists,missingSourceFiles:runtime.missingSourceFiles},engine:'Hermes AIAgent',model:currentModelConnection()?.model||'DeepSeek',skills:['template-design','page-edit','ppt-writing','chart-drawing','material-use','layout-review','harness-review','presentation-style','research-defense-layout']};
+ return {available:runtime.available,diagnostics:{pythonExists:runtime.pythonExists,missingSourceFiles:runtime.missingSourceFiles},engine:'Hermes AIAgent',model:currentModelConnection()?.model||'DeepSeek',skills:['template-design','page-edit','ppt-writing','chart-drawing','material-use','layout-review','harness-review','presentation-style','research-defense-layout',...officeSkillCatalog.map(s=>s.name)]};
 }
 export function summarizeHermesLog(log){
  const lines=String(log).split('\n').filter(s=>/API call #\d+/.test(s)),number=(s,key)=>Number(s.match(new RegExp('(?:^|[ ,])'+key+'=(\\d+)'))?.[1]||0);

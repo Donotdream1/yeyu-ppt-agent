@@ -1,5 +1,7 @@
 # Xuzhen — Editable PPTX Agent Workspace
 
+The [office assistant](docs/office-assistant.md) adds writing, team tasks, information aggregation, meeting transcripts, spreadsheet processing and evidence-based project review. Six pinned GitHub skill adapters execute through Hermes; visit `/office` and configure optional mail/ASR connections in Settings.
+
 [中文](README.md) · [Installation](docs/installation.md) · [Architecture](docs/architecture.md) · [Contributing](CONTRIBUTING.md)
 
 [User manual in Chinese](docs/manual/software-manual.md) · [Software documentation and source deposit](docs/software-copyright.md)

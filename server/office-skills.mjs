@@ -1,0 +1,8 @@
+export const officeSkillCatalog=[
+ {capability:'writing',name:'office-writing',title:'办公撰写',repository:'xcrrr/claude-skills',path:'skills/writing/email-drafter/SKILL.md',commit:'145342ceff6318d2f5ffe8f95473fecc8b27d1e9',license:'MIT',adoption:'明确收件人与单一目的、主题与行动请求；中文内部通知按本地规范适配。'},
+ {capability:'tasks',name:'office-tasks',title:'团队任务',repository:'xcrrr/claude-skills',path:'skills/productivity/task-planner/SKILL.md',commit:'145342ceff6318d2f5ffe8f95473fecc8b27d1e9',license:'MIT',adoption:'拆分可执行任务、负责人、期限与完成标准；不把建议工期自动写成承诺。'},
+ {capability:'summary',name:'office-summary',title:'信息摘要',repository:'xcrrr/claude-skills',path:'skills/research/summarizer/SKILL.md',commit:'145342ceff6318d2f5ffe8f95473fecc8b27d1e9',license:'MIT',adoption:'多源材料分开引用、保留限定条件、逐项核对摘要证据。'},
+ {capability:'meeting',name:'office-meeting',title:'会议语音与纪要',repository:'shangbianai/pm-meeting-notes',path:'SKILL.md',commit:'198052ce157fff377c5fd7423e700103a7a84a4b',license:'MIT',adoption:'清理口语噪声，区分原文、整理和推断，形成决定、行动项与待确认问题；语音转写由工具提供。'},
+ {capability:'sheet',name:'office-spreadsheets',title:'表格处理',repository:'MiniMax-AI/skills',path:'skills/minimax-xlsx/SKILL.md',commit:'60aaae52bb2af8162732751a4332f62a5fef518b',license:'MIT',adoption:'先读结构、保留原文件、推导用公式、核查汇总口径；本系统导出新的结果工作簿，不承诺原格式无损回写。'},
+ {capability:'review',name:'project-review',title:'项目辅助评审',repository:'microsoft/hve-core',path:'.github/skills/project-planning/architecture-review/SKILL.md',commit:'f2bc028c2a0c4ba8a693c35387c7afbfb20c1620',license:'CC-BY-4.0',adoption:'保留评审范围、证据、假设、风险与建议，区分辅助评审和决策权；评分维度为本系统自定义。'}
+].map(s=>({...s,url:`https://github.com/${s.repository}/blob/${s.commit}/${s.path}`,snapshot:`agents/vendor/office-skills/${s.capability}/SKILL.md`}));

@@ -6,7 +6,7 @@ import {accountStorage} from '../lib/account-storage';
 
 export function useStudio() {
   const useAuthUser=useAuth()?.user||{},accountStore=accountStorage(useAuthUser),canViewLibrary=useAuthUser.role==='owner';
-  const [tab, setTab] = useState(() =>{const route=readWorkspaceLocation(window.location),pref=useAuthUser.preferences?.personalization?.startPage;if(location.pathname==='/'&&!new URLSearchParams(location.search).has('tab')&&!route.outputId&&!route.publicId&&!route.jobId&&['create','history','projects','styles'].includes(pref))return pref;return route.tab==='library'&&!canViewLibrary?'create':route.tab;}),
+  const [tab, setTab] = useState(() =>{const route=readWorkspaceLocation(window.location),pref=useAuthUser.preferences?.personalization?.startPage;if(location.pathname==='/'&&!new URLSearchParams(location.search).has('tab')&&!route.outputId&&!route.publicId&&!route.jobId&&['home','create','history','projects','styles'].includes(pref))return pref;return route.tab==='library'&&!canViewLibrary?'create':route.tab;}),
     [studio, setStudio] = useState({
       templates: [],
       sources: [],

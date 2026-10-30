@@ -23,6 +23,12 @@ const icons = {
   "presentation-style": Palette,
 };
 const descriptions = {
+  "office-writing": "通知、邮件、信息汇总与跨部门收集说明",
+  "office-tasks": "任务拆分、负责人、期限、依赖与交付标准",
+  "office-summary": "多源摘要、原文依据、关键词与行动项",
+  "office-meeting": "语音转写整理、会议决定、任务与待确认问题",
+  "office-spreadsheets": "真实表头、白名单操作、公式与交叉汇总",
+  "project-review": "可研与需求六维审查、证据评分和改进建议",
   "page-edit": "逐页对话、文字与布局修改、图片放置与检查",
   "ppt-writing": "文档结构、叙事主线、逐页主题与文案",
   "chart-drawing": "统计口径、真实数据、可编辑图表",

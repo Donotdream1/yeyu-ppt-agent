@@ -49,6 +49,7 @@ server/bootstrap-v2.mjs
 !/scripts/render-manual-word.ps1
 !/scripts/verify-software-docs.py
 !/scripts/requirements-docs.txt
+!/scripts/verify-office.mjs
 /docs/*
 !/docs/installation.md
 !/docs/architecture.md
@@ -57,6 +58,8 @@ server/bootstrap-v2.mjs
 !/docs/user-model-connections.md
 !/docs/slides-workflow.md
 !/docs/software-copyright.md
+!/docs/office-assistant.md
+!/docs/office-verification.md
 !/docs/manual/
 !/docs/manual/**
 !/docs/screenshots/

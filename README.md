@@ -2,6 +2,12 @@
 
 # 叙帧 Xuzhen
 
+新增[办公助理与GitHub Skills](docs/office-assistant.md)：办公撰写、团队任务、信息归档、会议语音、Excel/WPS数据处理与项目辅助评审，AI统一由Hermes执行。入口 `/office`，连接在设置中配置。
+
+总工作台 `/workbench` 将PPT演示与六项办公能力并列。各能力职责、输入输出与模拟场景见[七能力验收](docs/office-verification.md)。
+
+![七能力工作台，使用隔离示例账号](docs/screenshots/workbench.png)
+
 **基于 Hermes 的可编辑 PPTX 智能体工作台。用自己的文档、模板和原生素材，生成演示稿，再围绕每一页对话修改。**
 
 [English](README.en.md) · [安装](docs/installation.md) · [架构](docs/architecture.md) · [配置](docs/configuration.md) · [贡献](CONTRIBUTING.md)

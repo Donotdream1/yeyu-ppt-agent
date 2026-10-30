@@ -1,0 +1,55 @@
+import multer from 'multer';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {dataDir} from './library.mjs';
+import {createOfficeService} from './office-store.mjs';
+import {importOfficeSource,syncOfficeMail,sendOfficeMail,transcribeOfficeAudio} from './office-connectors.mjs';
+import {writeWorkbook} from './office-sheets.mjs';
+import {officeDocx,reportMarkdown} from './office-export.mjs';
+import {officeSkillCatalog} from './office-skills.mjs';
+import {modelConnections,withModelConnection} from './model-connections.mjs';
+
+export function installOfficeRoutes(app,auth,{service}={}){
+ const lookup=async value=>{const u=(await auth.db()).users.find(u=>(u.username===value||u.id===value)&&!['disabled','removed'].includes(u.status));return u?{id:u.id,username:u.username,displayName:u.displayName}:null;};
+ const office=service||createOfficeService({lookupUser:lookup}),upload=multer({storage:multer.memoryStorage(),limits:{fileSize:25*1024*1024,files:1}}),syncing=new Set(),summarizing=new Set();
+ const pendingSummary=async user=>{if(summarizing.has(user.id))return;summarizing.add(user.id);try{const d=await office.read(),cfg=d.settings[user.id]?.mail;if(!cfg?.autoSummarize)return;let chars=0;const batch=[];for(const id of cfg.pendingSourceIds||[]){const source=d.sources.find(s=>s.id===id&&s.ownerId===user.id);if(!source)continue;if(chars+source.text.length>75000||batch.length>=10)break;batch.push(id);chars+=source.text.length;}if(!batch.length)return;await office.startJob(user,'summary',{sourceIds:batch,request:'汇总新同步邮件，保留来源并提取待处理事项。'});await office.update(d=>{const c=d.settings[user.id]?.mail;if(c)c.pendingSourceIds=(c.pendingSourceIds||[]).filter(id=>!batch.includes(id));});}finally{summarizing.delete(user.id);}};
+ const sync=async user=>{if(syncing.has(user.id))throw Error('邮箱正在同步');syncing.add(user.id);try{const before=new Set((await office.read()).sources.filter(s=>s.ownerId===user.id).map(s=>s.id)),r=await syncOfficeMail(office,user),fresh=r.items.filter(s=>!before.has(s.id));await office.update(d=>{const cfg=d.settings[user.id]?.mail;if(cfg){cfg.lastSyncAt=new Date().toISOString();cfg.lastSyncError='';if(cfg.autoSummarize)cfg.pendingSourceIds=[...new Set([...(cfg.pendingSourceIds||[]),...fresh.map(s=>s.id)])];}});await pendingSummary(user).catch(()=>{});return {count:r.count,newCount:fresh.length};}catch(e){await office.update(d=>{if(d.settings[user.id]?.mail)d.settings[user.id].mail.lastSyncError='同步失败，请核对连接并手动重试';});throw e;}finally{syncing.delete(user.id);}};
+ app.get('/api/office',async(req,res)=>res.json({...await office.overview(req.user),skills:officeSkillCatalog}));
+ app.post('/api/office/boards',async(req,res)=>res.status(201).json(await office.createBoard(req.user,req.body)));
+ app.patch('/api/office/boards/:id',async(req,res)=>res.json(await office.patchBoard(req.user,req.params.id,req.body)));
+ app.post('/api/office/boards/:id/members',async(req,res)=>res.json(await office.invite(req.user,req.params.id,req.body.username)));
+ app.delete('/api/office/boards/:id/members/:member',async(req,res)=>res.json(await office.removeMember(req.user,req.params.id,req.params.member)));
+ app.post('/api/office/boards/:id/tasks',async(req,res)=>res.status(201).json(await office.task(req.user,req.params.id,req.body)));
+ app.patch('/api/office/boards/:id/tasks/:task',async(req,res)=>res.json(await office.task(req.user,req.params.id,req.body,req.params.task)));
+ app.delete('/api/office/boards/:id/tasks/:task',async(req,res)=>res.json(await office.task(req.user,req.params.id,{delete:true},req.params.task)));
+ app.post('/api/office/boards/:id/collections',async(req,res)=>res.status(201).json(await office.createCollection(req.user,req.params.id,req.body)));
+ app.post('/api/office/boards/:id/collections/:cid/responses',async(req,res)=>res.json(await office.submitCollection(req.user,req.params.id,req.params.cid,req.body)));
+ app.get('/api/office/boards/:id/collections/:cid/export',async(req,res)=>{const table=await office.collectionTable(req.user,req.params.id,req.params.cid);res.attachment('collection.xlsx').send(await writeWorkbook(table));});
+ app.post('/api/office/notifications/:id/read',async(req,res)=>res.json(await office.markRead(req.user,req.params.id)));
+ app.post('/api/office/sources',async(req,res)=>res.status(201).json(await office.addSource(req.user,req.body)));
+ app.get('/api/office/sources',async(req,res)=>res.json(await office.searchSources(req.user,req.query.q)));
+ app.get('/api/office/sources/:id',async(req,res)=>res.json(await office.source(req.user,req.params.id)));
+ app.post('/api/office/sources/import',upload.single('file'),async(req,res)=>{if(!req.file)throw Error('请选择文件');const s=await office.addSource(req.user,await importOfficeSource(req.file));res.status(201).json(s);});
+ app.patch('/api/office/sources/:id',async(req,res)=>res.json(await office.sourceChange(req.user,req.params.id,req.body)));
+ app.post('/api/office/documents',async(req,res)=>res.status(201).json(await office.saveDocument(req.user,req.body)));
+ app.get('/api/office/documents/:id',async(req,res)=>res.json(await office.document(req.user,req.params.id)));
+ app.patch('/api/office/documents/:id',async(req,res)=>res.json(await office.updateDocument(req.user,req.params.id,req.body)));
+ app.get('/api/office/documents/:id/export',async(req,res)=>{const d=await office.document(req.user,req.params.id);if(req.query.format==='docx')res.attachment('office-document.docx').send(await officeDocx(d));else res.attachment('office-document.md').type('text/markdown').send(reportMarkdown(d));});
+ app.post('/api/office/documents/:id/send',async(req,res)=>res.json(await sendOfficeMail(office,req.user,req.params.id,req.body)));
+ app.post('/api/office/books/import',upload.single('file'),async(req,res)=>{if(!req.file)throw Error('请选择工作簿');res.status(201).json(await office.importBook(req.user,req.file.buffer,Buffer.from(req.file.originalname,'latin1').toString('utf8')));});
+ app.get('/api/office/books/:id',async(req,res)=>{const t=await office.getTable(req.user,req.params.id,+req.query.sheet||0);res.json({...t,totalRows:t.rows.length,rows:t.rows.slice(0,50)});});
+ app.post('/api/office/books/:id/apply',async(req,res)=>res.json(await office.applyBook(req.user,req.params.id,+req.body.sheet||0,req.body.operations)));
+ app.get('/api/office/books/:id/export',async(req,res)=>res.attachment('processed.xlsx').send(await office.exportBook(req.user,req.params.id,+req.query.sheet||0)));
+ app.delete('/api/office/books/:id',async(req,res)=>res.json(await office.deleteBook(req.user,req.params.id)));
+ app.get('/api/office/settings',async(req,res)=>res.json(await office.settings(req.user)));
+ app.put('/api/office/settings',async(req,res)=>res.json(await office.saveSettings(req.user,req.body)));
+ app.post('/api/office/mail/sync',async(req,res)=>res.json(await sync(req.user)));
+ app.post('/api/office/speech/transcribe',upload.single('file'),async(req,res)=>res.json(await transcribeOfficeAudio(office,req.user,req.file)));
+ app.post('/api/office/jobs',async(req,res)=>res.status(202).json(await office.startJob(req.user,req.body.kind,req.body)));
+ app.get('/api/office/jobs/:id',async(req,res)=>res.json(await office.job(req.user,req.params.id)));
+ app.get('/api/office/jobs/:id/trace',async(req,res)=>{const job=await office.job(req.user,req.params.id);const raw=await fs.readFile(path.join(dataDir,'hermes-runs',job.id,'tool-events.jsonl'),'utf8').catch(e=>{if(e.code==='ENOENT')return '';throw e;});res.json({job,events:raw.split('\n').filter(Boolean).slice(-100).map(l=>JSON.parse(l))});});
+ app.post('/api/office/jobs/:id/stop',async(req,res)=>res.json(await office.stopJob(req.user,req.params.id)));
+ let ticking=false,lastSync=0;const tick=async()=>{if(ticking)return;ticking=true;try{await office.reminders();const syncDue=Date.now()-lastSync>300000;if(syncDue)lastSync=Date.now();const d=await office.read();for(const [id,s]of Object.entries(d.settings)){if(!s.mail?.autoSync&&!s.mail?.pendingSourceIds?.length)continue;const user=await lookup(id);if(!user)continue;try{const conn=await modelConnections.resolve(id);await withModelConnection(conn,async()=>{if(s.mail.autoSync&&syncDue)await sync(user);else await pendingSummary(user);});}catch{/* The persistent pending queue retries after capacity becomes available. */}}}finally{ticking=false;}};
+ if(!service){void office.startup().then(tick).catch(()=>{});const timer=setInterval(()=>{void tick().catch(()=>{});},60000);timer.unref();}
+ return office;
+}

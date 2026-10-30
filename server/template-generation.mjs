@@ -130,7 +130,7 @@ function launchTemplateTask(job,options){
  const control=createTaskControl(job.id,{kind:'template',onStop:async()=>{job.status='stopping';job.phase='正在停止，等待当前操作安全结束';await persist(job);}});
  void runWithTaskControl(control,()=>run(job,options)).finally(()=>releaseTaskControl(control));
 }
-export async function stopTemplateGeneration(id,user){const job=active.get(id)||await templateGeneration(id,user);if(job.ownerId!==user.id&&user.role!=='owner')throw error('无权访问此模板任务',403);const stopping=await requestTaskStop(id);return stopping||publicTemplateGeneration(job);}
+export async function stopTemplateGeneration(id,user){const job=active.get(id)||await templateGeneration(id,user);if(job.ownerId!==user.id&&user.role!=='owner')throw error('无权访问此模板任务',403);if(!['running','queued','stopping'].includes(job.status))return publicTemplateGeneration(job);const stopping=await requestTaskStop(id);return stopping||publicTemplateGeneration(job);}
 export async function resumeTemplateGeneration(id,user,options={}){const job=await templateGeneration(id,user);if(active.has(id)||saving.has(id))throw error('模板仍在生成或保存',409);if(job.styleId)throw error('模板已保存，请从版式与Skills使用');job.status='running';job.processId=process.pid;delete job.error;active.set(id,job);try{await persist(job);}catch(e){active.delete(id);throw e;}launchTemplateTask(job,options);return publicTemplateGeneration(job);}
 export async function saveGeneratedTemplate(id,user){
  const job=await templateGeneration(id,user);if(job.styleId)return styleSkill(job.ownerId,job.styleId);if(job.status!=='review')throw error('请先完成模板生成');

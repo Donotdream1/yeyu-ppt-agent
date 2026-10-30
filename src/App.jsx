@@ -20,6 +20,7 @@ import {
   PanelLeftOpen,
   ChevronDown,
   Search,
+  BriefcaseBusiness,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -60,21 +61,28 @@ import HermesWorkspace from "@/components/workspace/HermesWorkspace";
 import SettingsPage from '@/components/workspace/SettingsPage';
 import {useAuth} from '@/components/AuthGate';
 import {accountStorage} from '@/lib/account-storage';
+import {capabilities} from '@/lib/capabilities';
 
 const ProjectHub=lazy(()=>import('@/components/workspace/ProjectHub'));
 const StyleMarket=lazy(()=>import('@/components/workspace/StyleMarket'));
+const OfficeWorkspace=lazy(()=>import('@/components/office/OfficeWorkspace'));
+const CapabilityHome=lazy(()=>import('@/components/office/CapabilityHome'));
 import HomeResources from '@/components/workspace/HomeResources';
 import ProjectCreateDialog from '@/components/workspace/ProjectCreateDialog';
 const navigation = [
+  ['home','工作台',BriefcaseBusiness],
+  ...capabilities.map(c=>[c.id,c.title,c.icon]),
   ["projects", "项目", FolderOpen],
   ["styles", "版式与Skills", Palette],
-  ["create", "创作工作台", Sparkles],
   ["history", "最近作品", Clock3],
   ["hermes", "Hermes 工作台", Workflow],
   ["library", "单页素材库", Layers],
   ["templates", "我的模板", LayoutTemplate],
 ];
 const headings = {
+  home:['工作台','工作台',''],
+  ...Object.fromEntries(capabilities.filter(c=>c.id.startsWith('office-')).map(c=>[c.id,[c.title,c.title,'']])),
+  office:['办公助理','办公助理',''],
   projects:['项目','项目',''],styles:['版式与Skills','版式与Skills',''],
   settings:['设置','设置',''],
   hermes: [
@@ -83,7 +91,7 @@ const headings = {
     "查看Hermes的角色分工、专业技能、真实工具调用与任务恢复状态。",
   ],
   create: [
-    "创作工作台",
+    "PPT演示",
     "让内容，成为清晰的演示",
     "从一份文档出发，结合你的模板与原生素材，完成整套PPT。",
   ],
@@ -230,17 +238,17 @@ export default function App() {
   };
   const sidebar = (
     <>
-      <div className="chat-sidebar-heading"><a className="app-brand" href="/workspace" aria-label="叙帧首页">
+      <div className="chat-sidebar-heading"><a className="app-brand" href="/workbench" aria-label="叙帧首页">
         <span>
           <BrandMark size={30} />
         </span>
         <div>
-          叙帧<small>PPT 智能体工作台</small>
+          叙帧<small>智能办公工作台</small>
         </div>
       </a><Button className="sidebar-collapse-toggle" variant="ghost" size="icon" aria-label={collapsed?'展开侧栏':'收起侧栏'} title={collapsed?'展开侧栏':'收起侧栏'} aria-expanded={!collapsed} aria-controls="desktop-sidebar" onClick={()=>setCollapsed(v=>!v)}>{collapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}</Button></div>
-      <Button className="new-presentation" aria-label="开始一份PPT" title="新建项目" disabled={!!s.busy} onClick={start}>
+      <Button className="new-presentation" aria-label="新建工作" title="选择一项能力" onClick={()=>go('home')}>
         <Plus />
-        <span className="sidebar-item-label">开始一份PPT</span>
+        <span className="sidebar-item-label">新建工作</span>
       </Button>
       <div className="sidebar-label">工作空间</div>
       <Button variant="ghost" className="chat-sidebar-search" aria-label="搜索演示" title="搜索演示" onClick={()=>setSearchOpen(true)}><Search size={17}/><span className="sidebar-item-label">搜索演示</span><kbd>Ctrl K</kbd></Button>
@@ -313,7 +321,7 @@ export default function App() {
                 : "main-content"+(s.tab==='create'&&step==='prepare'?' chat-home':'')
             }
           >
-            {!["projects","styles","hermes"].includes(s.tab)&&!(s.tab === "create" && step === "review") && (
+            {!["home","projects","styles","hermes","office"].includes(s.tab)&&!s.tab.startsWith('office-')&&!(s.tab === "create" && step === "review") && (
               <div className="workspace-heading">
                 <div>
                   <span className="small-kicker">
@@ -381,6 +389,8 @@ export default function App() {
             )}
             {s.tab==='projects'&&<Suspense fallback={<p>正在载入项目…</p>}><ProjectHub s={s} onStart={start} onOpen={openOutput} initialProject={projectView} onSelectProject={setProjectView}/></Suspense>}
             {s.tab==='styles'&&<Suspense fallback={<p>正在载入Skills…</p>}><StyleMarket s={s}/></Suspense>}
+            {s.tab==='home'&&<Suspense fallback={<p>正在载入工作台…</p>}><CapabilityHome onSelect={go} onSettings={()=>{setSettingsSection('model');go('settings');}}/></Suspense>}
+            {(s.tab==='office'||s.tab.startsWith('office-'))&&<Suspense fallback={<p>正在载入办公助理…</p>}><OfficeWorkspace capability={s.tab.startsWith('office-')?s.tab.slice(7):null} onCapabilityChange={v=>go('office-'+v)} onSettings={()=>{setSettingsSection('model');go('settings');}} onNavigate={go}/></Suspense>}
             {s.tab === "history" && (
               <History onOpen={openOutput} onNew={start} disabled={!!s.busy} />
             )}
