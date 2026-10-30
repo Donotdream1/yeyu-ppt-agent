@@ -67,8 +67,8 @@ def base_document(name, version, source=False):
     page_geometry(doc.sections[0], source)
     doc.core_properties.title = name + " " + version
     doc.core_properties.subject = "源程序鉴别材料" if source else "软件使用说明书"
-    doc.core_properties.author = "页语项目文档"
-    doc.core_properties.last_modified_by = "页语项目文档"
+    doc.core_properties.author = "叙帧项目文档"
+    doc.core_properties.last_modified_by = "叙帧项目文档"
     doc.core_properties.comments = ""
     for key in ("Normal", "Title", "Subtitle", "Heading 1", "Heading 2", "Heading 3", "Caption"):
         style = doc.styles[key]
@@ -137,7 +137,7 @@ def manual(name, version, output, compiled):
     doc = base_document(name, version)
     cover = doc.sections[0]
     cover.different_first_page_header_footer = True
-    for text, size, before, after in ((name, 22, 105, 20), (version, 20, 0, 28), ("软件使用说明书", 22, 0, 65), ("软件简称  页语", 12, 0, 14), ("软件类型  文档与演示编排软件", 12, 0, 14), ("编制日期  " + compiled.strftime("%Y年%m月%d日"), 12, 0, 0)):
+    for text, size, before, after in ((name, 22, 105, 20), (version, 20, 0, 28), ("软件使用说明书", 22, 0, 65), ("软件简称  叙帧", 12, 0, 14), ("软件类型  文档与演示编排软件", 12, 0, 14), ("编制日期  " + compiled.strftime("%Y年%m月%d日"), 12, 0, 0)):
         p = doc.add_paragraph(style="Title" if size >= 20 else None)
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.paragraph_format.first_line_indent = Pt(0)

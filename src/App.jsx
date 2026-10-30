@@ -181,7 +181,7 @@ export default function App() {
     setMobileMenu(false);
   };
   useEffect(()=>{const handle=async()=>{const route=readWorkspaceLocation(window.location);if(route.tab==='library'&&auth?.user?.role!=='owner'){window.history.replaceState(null,'','/workspace');s.setTab('create');return;}s.setTab(route.tab);if(route.tab==='settings')setSettingsSection(route.settingsSection||'account');if(route.outputId||route.publicId){try{const id=route.outputId||(await api('/api/links/'+route.publicId)).outputId,out=await api('/api/outputs/'+id);s.setOutput(out);s.setPlan(out.plan);s.setPage(Math.min(route.page,out.pages-1));setStep('review');}catch(error){s.setError(error.message);}}else if(route.jobId){s.setJobId(route.jobId);setStep('generate');}else if(route.tab==='create'){s.setOutput(null);s.setPlan(null);setStep('prepare');}};window.addEventListener('popstate',handle);return()=>window.removeEventListener('popstate',handle);},[]);
-  useEffect(()=>{document.title=s.tab==='create'&&s.output?`${s.output.title} · 第${s.page+1}页 | 页语`:`${heading[0]} | 页语`;},[s.tab,s.output?.id,s.page]);
+  useEffect(()=>{document.title=s.tab==='create'&&s.output?`${s.output.title} · 第${s.page+1}页 | 叙帧`:`${heading[0]} | 叙帧`;},[s.tab,s.output?.id,s.page]);
   const start = (folderId=null,folderName='') => {
     if(typeof folderId!=='string'){setProjectDialog(true);return;}
     s.openProjectDraft(folderId,folderName);
@@ -230,12 +230,12 @@ export default function App() {
   };
   const sidebar = (
     <>
-      <div className="chat-sidebar-heading"><a className="app-brand" href="/workspace" aria-label="页语首页">
+      <div className="chat-sidebar-heading"><a className="app-brand" href="/workspace" aria-label="叙帧首页">
         <span>
           <BrandMark size={30} />
         </span>
         <div>
-          页语<small>PPT 智能体工作台</small>
+          叙帧<small>PPT 智能体工作台</small>
         </div>
       </a><Button className="sidebar-collapse-toggle" variant="ghost" size="icon" aria-label={collapsed?'展开侧栏':'收起侧栏'} title={collapsed?'展开侧栏':'收起侧栏'} aria-expanded={!collapsed} aria-controls="desktop-sidebar" onClick={()=>setCollapsed(v=>!v)}>{collapsed?<PanelLeftOpen size={18}/>:<PanelLeftClose size={18}/>}</Button></div>
       <Button className="new-presentation" aria-label="开始一份PPT" title="新建项目" disabled={!!s.busy} onClick={start}>
@@ -303,7 +303,7 @@ export default function App() {
               >
                 <Menu />
               </Button>
-              <strong className="chat-product-switch">页语 <ChevronDown size={16}/></strong><span className="chat-current-module">{heading[0]}</span>
+              <strong className="chat-product-switch">叙帧 <ChevronDown size={16}/></strong><span className="chat-current-module">{heading[0]}</span>
             </div>
           </header>
           <main
@@ -321,7 +321,7 @@ export default function App() {
                       ? "DOCUMENT TO PRESENTATION"
                       : s.tab === "library"
                         ? "YOUR EDITABLE MATERIALS"
-                        : "YEYU WORKSPACE"}
+                        : "XUZHEN WORKSPACE"}
                   </span>
                   <h1>{heading[1]}</h1>
                   <p>{heading[2]}</p>

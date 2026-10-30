@@ -15,7 +15,7 @@ export async function desktopRoot(){
 }
 const within=(root,target)=>{const rel=path.relative(root,target);return !rel||!rel.startsWith('..'+path.sep)&&rel!=='..'&&!path.isAbsolute(rel);};
 const safeName=s=>String(s).replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').replace(/[. ]+$/g,'').slice(0,80)||'project';
-export async function projectLocation(user){const desktop=await desktopRoot();return {desktop,defaultRoot:path.join(desktop,'页语项目',user.id.slice(0,8))};}
+export async function projectLocation(user){const desktop=await desktopRoot();return {desktop,defaultRoot:path.join(desktop,'叙帧项目',user.id.slice(0,8))};}
 export async function allocateProject(user,folder,parentPath){
  const {validateProjectParent}=await import('./project-directories.mjs');
  const parent=await validateProjectParent(user,parentPath,{create:true});

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Hermes-powered editable PPTX workspace with native template reuse and per-slide conversations",
   "license": "MIT",
-  "author": "Donotdream1 and Yeyu contributors",
+  "author": "Donotdream1 and Xuzhen contributors",
   "repository": {"type":"git","url":"https://github.com/Donotdream1/yeyu-ppt-agent.git"},
   "engines": {"node": ">=22.12.0"},
   "type": "module",

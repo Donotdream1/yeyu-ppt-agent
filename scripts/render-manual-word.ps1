@@ -42,7 +42,7 @@ if ($SanitizeMetadata) {
       $namespaces = New-Object Xml.XmlNamespaceManager($core.NameTable)
       $namespaces.AddNamespace('dc','http://purl.org/dc/elements/1.1/')
       $namespaces.AddNamespace('cp','http://schemas.openxmlformats.org/package/2006/metadata/core-properties')
-      $identity = -join ([char[]]@(0x9875,0x8BED,0x9879,0x76EE,0x6587,0x6863))
+      $identity = -join ([char[]]@(0x53D9,0x5E27,0x9879,0x76EE,0x6587,0x6863))
       foreach ($node in $core.SelectNodes('//dc:creator | //cp:lastModifiedBy',$namespaces)) { $node.InnerText = $identity }
       $part.Delete()
       $replacement = $package.CreateEntry('docProps/core.xml')

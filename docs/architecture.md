@@ -1,6 +1,6 @@
 # Architecture
 
-Yeyu separates document planning, material retrieval, page writing, native PPTX
+Xuzhen separates document planning, material retrieval, page writing, native PPTX
 composition and validation. Hermes is the execution engine; a compatible model
 provider supplies reasoning and tool calls.
 

@@ -1,6 +1,6 @@
-<p align="center"><img src="public/logo.svg" width="64" alt="页语 Logo"></p>
+<p align="center"><img src="public/logo.svg" width="64" alt="叙帧 Logo"></p>
 
-# 页语 Yeyu
+# 叙帧 Xuzhen
 
 **基于 Hermes 的可编辑 PPTX 智能体工作台。用自己的文档、模板和原生素材，生成演示稿，再围绕每一页对话修改。**
 

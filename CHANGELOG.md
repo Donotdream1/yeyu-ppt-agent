@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Rename the product to 叙帧 (Xuzhen), reflecting document storytelling and slide composition.
+- Update the interface, page editor, browser titles, current documentation and future document exports.
+- Retain existing repository addresses, session identifiers and saved project locations for compatibility. Previously published releases retain their original names.
+
 ## 0.1.0 — 2026-10-28
 
 Initial public source release of Yeyu, a Hermes-powered editable PPTX workspace.

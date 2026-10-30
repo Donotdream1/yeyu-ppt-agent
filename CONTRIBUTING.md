@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for helping improve Yeyu. Chinese and English issues and pull requests
+Thank you for helping improve Xuzhen. Chinese and English issues and pull requests
 are welcome.
 
 1. Read [installation](docs/installation.md) and [architecture](docs/architecture.md).

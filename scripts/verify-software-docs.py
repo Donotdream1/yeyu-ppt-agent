@@ -17,7 +17,7 @@ def inspect_package(path):
         core = ET.fromstring(z.read("docProps/core.xml"))
         for node in core:
             if node.tag.endswith("}creator") or node.tag.endswith("}lastModifiedBy"):
-                if node.text != "页语项目文档":
+                if node.text != "叙帧项目文档":
                     raise ValueError("Sanitize Office author metadata before publication")
         root = ET.fromstring(z.read("word/document.xml"))
         text = "\n".join(n.text or "" for n in root.findall(".//w:t", NS))

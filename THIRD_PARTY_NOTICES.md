@@ -1,6 +1,6 @@
 # Third-party notices
 
-Yeyu's original code is MIT licensed. Third-party code retains its own license.
+Xuzhen's original code is MIT licensed. Third-party code retains its own license.
 User-supplied templates, material libraries, documents, logos, fonts, photos and
 generated private presentations are **not** part of this repository or its license grant.
 
